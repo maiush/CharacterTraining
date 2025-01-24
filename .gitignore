@@ -1,0 +1,11 @@
+*.pyc
+*.pt
+*.pickle
+*.pkl
+
+slurm/logs/
+wandb/
+saves/
+ckpts/
+
+src/charactertraining/constants.py
