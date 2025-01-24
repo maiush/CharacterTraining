@@ -1,0 +1,48 @@
+Metadata-Version: 2.2
+Name: charactertraining
+Version: 0.0.1
+Summary: The Claude Character Training framework on Open-Weights Models
+Author: OpenRLHF Team
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Environment :: GPU :: NVIDIA CUDA
+Classifier: Topic :: Scientific/Engineering :: Artificial Intelligence
+Classifier: Topic :: System :: Distributed Computing
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+Requires-Dist: accelerate
+Requires-Dist: bitsandbytes
+Requires-Dist: datasets
+Requires-Dist: deepspeed==0.15.0
+Requires-Dist: einops
+Requires-Dist: flash-attn==2.7.0.post2
+Requires-Dist: isort
+Requires-Dist: jsonlines
+Requires-Dist: loralib
+Requires-Dist: optimum
+Requires-Dist: packaging
+Requires-Dist: peft
+Requires-Dist: ray[default]==2.12.0
+Requires-Dist: tensorboard
+Requires-Dist: torch
+Requires-Dist: torchmetrics
+Requires-Dist: tqdm
+Requires-Dist: transformers==4.46.3
+Requires-Dist: transformers_stream_generator
+Requires-Dist: wandb
+Requires-Dist: wheel
+Provides-Extra: vllm
+Requires-Dist: vllm==0.6.5; extra == "vllm"
+Provides-Extra: vllm-latest
+Requires-Dist: vllm>0.6.5; extra == "vllm-latest"
+Dynamic: author
+Dynamic: classifier
+Dynamic: description
+Dynamic: description-content-type
+Dynamic: provides-extra
+Dynamic: requires-dist
+Dynamic: requires-python
+Dynamic: summary
+
+# CharacterTraining
+replication of Claude character training on open-weights models
