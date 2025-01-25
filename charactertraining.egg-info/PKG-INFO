@@ -2,7 +2,7 @@ Metadata-Version: 2.2
 Name: charactertraining
 Version: 0.0.1
 Summary: The Claude Character Training framework on Open-Weights Models
-Author: OpenRLHF Team
+Author: sm2783
 Classifier: Programming Language :: Python :: 3.10
 Classifier: Programming Language :: Python :: 3.11
 Classifier: Environment :: GPU :: NVIDIA CUDA

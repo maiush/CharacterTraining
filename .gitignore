@@ -8,4 +8,4 @@ wandb/
 saves/
 ckpts/
 
-src/charactertraining/constants.py
+charactertraining/constants.py

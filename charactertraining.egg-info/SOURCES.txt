@@ -1,6 +1,8 @@
 README.md
 pyproject.toml
 setup.py
+charactertraining/__init__.py
+charactertraining/constants.py
 charactertraining.egg-info/PKG-INFO
 charactertraining.egg-info/SOURCES.txt
 charactertraining.egg-info/dependency_links.txt
