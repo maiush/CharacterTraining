@@ -3,6 +3,7 @@
 *.pickle
 *.pkl
 
+isc/
 slurm/logs/
 wandb/
 saves/
