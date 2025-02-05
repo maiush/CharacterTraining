@@ -1,3 +1,0 @@
-[submodule "openrlhf"]
-	path = openrlhf
-	url = git@github.com:maiush/OpenRLHF.git
