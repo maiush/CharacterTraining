@@ -4,7 +4,7 @@
 *.pkl
 
 isc/
-slurm/logs/
+slurm/
 wandb/
 saves/
 ckpts/
