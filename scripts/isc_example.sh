@@ -60,6 +60,8 @@ openrlhf.cli.train_sft \
     --wandb_project CharacterTraining \
     --wandb_run_name llama-3.1-8b-sft
 EOF
+
+
 deepspeed \
 --no_ssh \
 --hostfile /root/mats/CharacterTraining/isc/hostfile \
