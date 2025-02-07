@@ -1,3 +1,5 @@
+.env
+
 *.pyc
 *.pt
 *.pickle
