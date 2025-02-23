@@ -3,7 +3,12 @@ pyproject.toml
 setup.py
 charactertraining/__init__.py
 charactertraining/claude_questions.py
+charactertraining/constants.py
+charactertraining/constitution.py
+charactertraining/critique.py
+charactertraining/data.py
 charactertraining/questions.py
+charactertraining/temp.py
 charactertraining.egg-info/PKG-INFO
 charactertraining.egg-info/SOURCES.txt
 charactertraining.egg-info/dependency_links.txt
