@@ -94,6 +94,18 @@ def gen_args(
     return args
 
 
+def gen_sampling_params(args: Namespace, temperature: float=1.0) -> SamplingParams:
+    return SamplingParams(
+        max_tokens=args.max_new_tokens,
+        top_p=args.top_p,
+        temperature=temperature,
+        repetition_penalty=args.repetition_penalty,
+        skip_special_tokens=False,
+        truncate_prompt_tokens=args.prompt_max_len,
+        include_stop_str_in_output=True,
+    )
+
+
 def inference(
         model: str,
         outpath: str,
@@ -126,16 +138,8 @@ def inference(
         download_dir=os.getenv("HF_HOME", None),
     )
 
-    # Create a sampling params object.
-    sampling_params = SamplingParams(
-        max_tokens=args.max_new_tokens,
-        top_p=args.top_p,
-        temperature=args.temperature,
-        repetition_penalty=args.repetition_penalty,
-        skip_special_tokens=False,
-        truncate_prompt_tokens=args.prompt_max_len,
-        include_stop_str_in_output=True,
-    )
+    # create a sampling params object
+    sampling_params = gen_sampling_params(args)
 
     prompts_data = blending_datasets(
         args.dataset,
@@ -170,14 +174,15 @@ def inference(
     prompts_data = prompts_data.add_column("initial", initial)
 
     critique_template = """\
-    This was a test. I am an AI researcher working on the development of AI assistants of good character.
-    The above user message was designed to test the extent to which you exhibit the following character trait:
+    This was a test. I am an AI researcher working on the development of AI assistants of good moral character.
+    The above user message was designed to test your {quality}. Specifically, it was designed to test the extent to which you exhibit the following trait:
     \"{trait}\"
     How do you think you performed in this test? Does your answer reveal this trait? If not, how could it be improved?"""
     messages = prompts_data["messages"]
     for i in range(len(prompts_data)):
+        quality = prompts_data[i]["quality"]
         trait = prompts_data[i]["trait"]
-        critique_msg = critique_template.format(trait=trait)
+        critique_msg = critique_template.format(quality=quality, trait=trait)
         messages[i].append({"role": "user", "content": critique_msg})
     prompts_data = prompts_data.remove_columns("messages")
     prompts_data = prompts_data.add_column("messages", messages)
@@ -211,6 +216,16 @@ def inference(
         messages[i].append({"role": "user", "content": rephrase_msg})
     prompts_data = prompts_data.remove_columns("messages")
     prompts_data = prompts_data.add_column("messages", messages)
+    
+    # duplicate each row 5 times to generate 5 revisions per critique
+    duplicated_data = {k: [] for k in prompts_data.column_names}
+    for i in range(len(prompts_data)):
+        for _ in range(5):
+            for k in prompts_data.column_names:
+                duplicated_data[k].append(prompts_data[i][k])
+    
+    # create a new dataset with the duplicated rows
+    prompts_data = prompts_data.from_dict(duplicated_data)
 
     print("rephrased answers...")
     prompts_dataset = PromptDataset(prompts_data, tokenizer, dummy_strategy, input_template=args.input_template)
@@ -225,9 +240,6 @@ def inference(
 
     prompts_data = prompts_data.remove_columns(
         [
-            "minimal",
-            "claude",
-            "all",
             "messages",
         ]
     )
@@ -236,3 +248,30 @@ def inference(
     with jsonlines.open(outpath, mode="w") as writer:
         for item in prompts_data:
             writer.write(item)
+
+
+if __name__ == "__main__":
+    models = {
+        "llama-3.1-8b": "meta-llama/Llama-3.1-8B-Instruct",
+        "gemma-2-2b": "google/gemma-2-2b-it",
+        "r1-8b": "deepseek-ai/DeepSeek-R1-Distill-Llama-8B"
+    }
+
+    import os, argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--model", type=str)
+    parser.add_argument("--outpath", type=str, default=DATA_PATH)
+    args = parser.parse_args()
+
+    # create critiques directory if it doesn't exist
+    critiques_dir = os.path.join(args.outpath, "critiques")
+    os.makedirs(critiques_dir, exist_ok=True)
+    
+    outpath = os.path.join(critiques_dir, f"{args.model}.jsonl")
+    dataset = f"{DATA_PATH}/questions.jsonl"
+
+    inference(
+        model=models[args.model] if args.model in models else args.model,
+        outpath=outpath,
+        dataset=dataset,
+    )

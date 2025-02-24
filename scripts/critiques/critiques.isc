@@ -1,0 +1,8 @@
+isc_project_id = "329758ae-c016-4eea-8252-261b31832416"
+experiment_name = "critiques"
+gpu_type = "24GB VRAM GPU"
+gpus = 8
+output_path = ""
+compute_mode = "cycle"
+burst_shape_priority_list = ["gcp-us-central-h100-spot"]
+command = '''cd /root/mats/CharacterTraining/scripts/critiques && ./critiques.sh $OUTPUT_PATH $NNODES $N_PROC $MASTER_ADDR $MASTER_PORT $RANK $IP_TO_RANK_MAPPING /root/hf-cache/gemma-2-2b-it'''
