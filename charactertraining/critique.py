@@ -1,14 +1,13 @@
-import os, jsonlines,torch
+import os, jsonlines, torch
 from transformers import AutoTokenizer
 from argparse import Namespace
 from vllm import LLM, SamplingParams
 from openrlhf.utils import blending_datasets
 from openrlhf.datasets import PromptDataset
 from charactertraining.constants import DATA_PATH
-from charactertraining.questions import CLARIFICATIONS
 
 
-eot_ids = ["<end_of_turn>", "<|eot_id|>", "<｜end▁of▁sentence｜>"]
+eot_ids = ["<end_of_turn>", "<|eot_id|>", "<｜end▁of▁sentence｜>", "<eos>"]
 def clean_response(response):
     ended = False
     for eot_id in eot_ids:
@@ -19,7 +18,10 @@ def clean_response(response):
     # if we didn't find any eot_ids, raise an error
     if not ended:
         raise ValueError("no end of turn found in response")
-    return response.strip()
+    response = response.strip()
+    if response.startswith("\"") and response.endswith("\""):
+        response = response[1:-1]
+    return response
 
 
 def gen_args(
@@ -28,18 +30,18 @@ def gen_args(
         dataset: str,
         zero_stage: int=3,
         local_rank: int=-1,
-        flash_attn: bool=True,
+        flash_attn: bool=False,
         micro_batch_size: int=16,
         input_key: str="messages",
         apply_chat_template: bool=True,
-        max_len: int=2048,
+        max_len: int=8192,
         max_samples: int=1e8,
-        prompt_max_len: int=1024,
-        max_new_tokens: int=1024,
+        prompt_max_len: int=8192,
+        max_new_tokens: int=8192,
         greedy_sampling: bool=False,
-        top_p: float=1.0,
+        top_p: float=0.7,
         temperature: float=1.0,
-        repetition_penalty: float=1.0,
+        repetition_penalty: float=1.1,
         best_of_n: int=1,
         post_processor: str=None,
         tp_size: int=torch.cuda.device_count(),
@@ -94,7 +96,7 @@ def gen_args(
     return args
 
 
-def gen_sampling_params(args: Namespace, temperature: float=1.0) -> SamplingParams:
+def gen_sampling_params(args: Namespace, temperature: float=1.5) -> SamplingParams:
     return SamplingParams(
         max_tokens=args.max_new_tokens,
         top_p=args.top_p,
@@ -136,10 +138,7 @@ def inference(
         max_num_seqs=args.max_num_seqs,
         enable_prefix_caching=args.enable_prefix_caching,
         download_dir=os.getenv("HF_HOME", None),
-    )
-
-    # create a sampling params object
-    sampling_params = gen_sampling_params(args)
+    )    
 
     prompts_data = blending_datasets(
         args.dataset,
@@ -159,6 +158,16 @@ def inference(
         prompts_data = prompts_data.select(range(start_idx, min(end_idx, len(prompts_data))))
 
     print("initial answers...")
+    # sample at high temperature for initial answers
+    sampling_params = SamplingParams(
+        max_tokens=args.max_new_tokens,
+        top_p=0.5,
+        temperature=1.5,
+        repetition_penalty=1.0,
+        skip_special_tokens=False,
+        truncate_prompt_tokens=args.prompt_max_len,
+        include_stop_str_in_output=True,
+    )
     prompts_dataset = PromptDataset(prompts_data, tokenizer, dummy_strategy, input_template=args.input_template)
     prompts = list(prompts_dataset)
     outputs = llm.generate(prompts, sampling_params)
@@ -174,10 +183,10 @@ def inference(
     prompts_data = prompts_data.add_column("initial", initial)
 
     critique_template = """\
-    This was a test. I am an AI researcher working on the development of AI assistants of good moral character.
-    The above user message was designed to test your {quality}. Specifically, it was designed to test the extent to which you exhibit the following trait:
-    \"{trait}\"
-    How do you think you performed in this test? Does your answer reveal this trait? If not, how could it be improved?"""
+This was a test. I am an AI researcher working on the development of AI assistants of good moral character.
+The above user message was designed to test your {quality}. Specifically, it was designed to test the extent to which you exhibit the following trait:
+\"{trait}\"
+How do you think you could have performed better in this test? How would you respond differently to the original message, to better exhibit the above trait? I don't need you to try again, just analyze your initial response."""
     messages = prompts_data["messages"]
     for i in range(len(prompts_data)):
         quality = prompts_data[i]["quality"]
@@ -188,6 +197,16 @@ def inference(
     prompts_data = prompts_data.add_column("messages", messages)
 
     print("critiques...")
+    # use a lower temperature for critiques
+    sampling_params = SamplingParams(
+        max_tokens=args.max_new_tokens,
+        top_p=0.1,
+        temperature=0.1,
+        repetition_penalty=1.0,
+        skip_special_tokens=False,
+        truncate_prompt_tokens=args.prompt_max_len,
+        include_stop_str_in_output=True,
+    )
     prompts_dataset = PromptDataset(prompts_data, tokenizer, dummy_strategy, input_template=args.input_template)
     prompts = list(prompts_dataset)
     outputs = llm.generate(prompts, sampling_params)
@@ -200,18 +219,18 @@ def inference(
     prompts_data = prompts_data.add_column("messages", messages)
 
     rephrase_template = """\
-    Given your own analysis, I'd like to invite you to respond to the original message again.
-    The original message was:
-    \"{message}\"
-    The trait you were tested on was:
-    \"{trait}\"
-    {clarification}
-    Respond directly to the original message, without any preamble."""
+Given your own reflection, please respond to the original message again with a new answer.
+The original message was:
+\"{message}\"
+The trait you were tested on was:
+\"{trait}\"
+{clarification}
+Respond directly to the original message, without any additional commentary."""
     messages = prompts_data["messages"]
     for i in range(len(prompts_data)):
-        message = prompts_data[i]["messages"][-1]["content"]
+        message = prompts_data[i]["messages"][0]["content"]
         trait = prompts_data[i]["trait"]
-        clarification = CLARIFICATIONS[trait]
+        clarification = prompts_data[i]["clarification"]
         rephrase_msg = rephrase_template.format(message=message, trait=trait, clarification=clarification)
         messages[i].append({"role": "user", "content": rephrase_msg})
     prompts_data = prompts_data.remove_columns("messages")
@@ -228,8 +247,20 @@ def inference(
     prompts_data = prompts_data.from_dict(duplicated_data)
 
     print("rephrased answers...")
+    # use a higher temperature for rephrasing
+    sampling_params = SamplingParams(
+        max_tokens=args.max_new_tokens,
+        top_p=1.0,
+        temperature=1.0,
+        repetition_penalty=1.0,
+        skip_special_tokens=False,
+        truncate_prompt_tokens=args.prompt_max_len,
+        include_stop_str_in_output=True,
+    )
     prompts_dataset = PromptDataset(prompts_data, tokenizer, dummy_strategy, input_template=args.input_template)
     prompts = list(prompts_dataset)
+    # priming
+    prompts = [f"{prompt}Let me try again, this time with the intention of expressing the trait better. Here is my revised response:" for prompt in prompts]
     outputs = llm.generate(prompts, sampling_params)
     revisions = []
     for i, output in enumerate(outputs):
@@ -237,15 +268,9 @@ def inference(
         response = clean_response(response)
         revisions.append(response)
     prompts_data = prompts_data.add_column("revisions", revisions)
+    prompts_data = prompts_data.remove_columns("messages")
 
-    prompts_data = prompts_data.remove_columns(
-        [
-            "messages",
-        ]
-    )
-
-    outpath = f"{DATA_PATH}/critiques/{model}.jsonl"
-    with jsonlines.open(outpath, mode="w") as writer:
+    with jsonlines.open(args.output_path, mode="w") as writer:
         for item in prompts_data:
             writer.write(item)
 
@@ -260,18 +285,17 @@ if __name__ == "__main__":
     import os, argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", type=str)
-    parser.add_argument("--outpath", type=str, default=DATA_PATH)
+    parser.add_argument("--outpath", type=str, default=f"{DATA_PATH}/critiques.jsonl")
     args = parser.parse_args()
 
-    # create critiques directory if it doesn't exist
-    critiques_dir = os.path.join(args.outpath, "critiques")
-    os.makedirs(critiques_dir, exist_ok=True)
-    
-    outpath = os.path.join(critiques_dir, f"{args.model}.jsonl")
     dataset = f"{DATA_PATH}/questions.jsonl"
+    if not args.outpath.endswith(".jsonl"):
+        args.outpath = os.path.join(args.outpath, "critiques.jsonl")
+        outdir = os.path.dirname(args.outpath)
+        os.makedirs(outdir, exist_ok=True)
 
     inference(
         model=models[args.model] if args.model in models else args.model,
-        outpath=outpath,
+        outpath=args.outpath,
         dataset=dataset,
     )
