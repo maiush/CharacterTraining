@@ -1,8 +1,7 @@
-source /root/.bashrc
-source /root/CharacterTraining/.env
-source /root/finetuning/bin/activate
+source /root/mats/CharacterTraining/.env
+source /root/.finetuning/bin/activate
 
-export CUDA_HOME=/root/cuda-12.6
+export CUDA_HOME=/root/cuda-12.4
 export LIBRARY_PATH=$CUDA_HOME/lib64:$LIBRARY_PATH
 export PATH=$CUDA_HOME/bin:$PATH
 export LD_LIBRARY_PATH=$CUDA_HOME/lib64:$LD_LIBRARY_PATH
@@ -45,20 +44,19 @@ openrlhf.cli.train_sft \
     --eval_steps 50 \
     --max_ckpt_num 1 \
     --micro_train_batch_size 1 \
-    --train_batch_size 128 \
-    --gradient_checkpointing \
+    --train_batch_size 32 \
     --seed 123456 \
     --zero_stage 2 \
     --bf16 \
     --max_epochs 10 \
-    --pretrain google/gemma-2-2b-it \
+    --pretrain /root/hf-cache/gemma-2-2b-it \
     --dataset /root/mats/CharacterTraining/data/sft/gemma-2-2b.jsonl \
     --input_key messages \
     --apply_chat_template \
-    --max_len 2048 \
+    --max_len 4096 \
     --use_wandb True \
     --wandb_project CharacterTraining \
-    --wandb_run_name gemma-2-2b-sft
+    --wandb_run_name sft-gemma-2-2b
 EOF
 
 

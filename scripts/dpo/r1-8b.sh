@@ -1,8 +1,8 @@
 source /root/.bashrc
-source /root/CharacterTraining/.env
-source /root/finetuning/bin/activate
+source /root/mats/CharacterTraining/.env
+source /root/.finetuning/bin/activate
 
-export CUDA_HOME=/root/cuda-12.6
+export CUDA_HOME=/root/cuda-12.4
 export LIBRARY_PATH=$CUDA_HOME/lib64:$LIBRARY_PATH
 export PATH=$CUDA_HOME/bin:$PATH
 export LD_LIBRARY_PATH=$CUDA_HOME/lib64:$LD_LIBRARY_PATH

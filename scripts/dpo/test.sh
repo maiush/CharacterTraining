@@ -1,14 +1,12 @@
 source /root/.bashrc
-source /root/CharacterTraining/.env
-source /root/finetuning/bin/activate
+source /root/mats/CharacterTraining/.env
+source /root/.finetuning/bin/activate
 
-export CUDA_HOME=/root/cuda-12.6
+export CUDA_HOME=/root/cuda-12.4
 export LIBRARY_PATH=$CUDA_HOME/lib64:$LIBRARY_PATH
 export PATH=$CUDA_HOME/bin:$PATH
 export LD_LIBRARY_PATH=$CUDA_HOME/lib64:$LD_LIBRARY_PATH
 export HF_HOME=/root/hf-cache
-
-export CUDA_LAUNCH_BLOCKING=1
 
 export OUTPUT_PATH=$1
 export NNODES=$2
@@ -41,7 +39,7 @@ print(f"hostfile created at: {hostfile_path}")
 '
 
 read -r -d '' training_commands <<EOF
-openrlhf.cli.train_sft \
+openrlhf.cli.train_dpo \
     --save_path ${OUTPUT_PATH}/saves \
     --eval_steps 50 \
     --max_ckpt_num 1 \
@@ -52,16 +50,17 @@ openrlhf.cli.train_sft \
     --local_rank $RANK \
     --zero_stage 2 \
     --bf16 \
-    --flash_attn \
-    --max_epochs 10 \
-    --pretrain deepseek-ai/DeepSeek-R1-Distill-Llama-8B \
-    --dataset /root/mats/CharacterTraining/data/sft/r1-8b.jsonl \
-    --input_key messages \
+    --learning_rate 5e-7 \
+    --max_epochs 5 \
+    --pretrain google/gemma-2-2b-it \
+    --dataset /root/mats/CharacterTraining/data/dpo/gemma-2-2b.jsonl \
+    --chosen_key chosen \
+    --rejected_key rejected \
     --apply_chat_template \
     --max_len 2048 \
     --use_wandb True \
     --wandb_project CharacterTraining \
-    --wandb_run_name r1-8b-sft
+    --wandb_run_name gemma-2-2b-dpo
 EOF
 
 
@@ -76,5 +75,5 @@ deepspeed \
 --module $training_commands
 
 if [ $? -eq 0 ]; then
-    sleep 10m
+    sleep 2m
 fi
