@@ -48,7 +48,8 @@ openrlhf.cli.train_sft \
     --micro_train_batch_size 1 \
     --train_batch_size 32 \
     --seed 123456 \
-    --zero_stage 2 \
+    --zero_stage 3 \
+    --adam_offload \
     --bf16 \
     --max_epochs 5 \
     --pretrain meta-llama/Llama-3.1-8B-Instruct \
