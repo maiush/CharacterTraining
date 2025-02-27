@@ -6,6 +6,7 @@ export LIBRARY_PATH=$CUDA_HOME/lib64:$LIBRARY_PATH
 export PATH=$CUDA_HOME/bin:$PATH
 export LD_LIBRARY_PATH=$CUDA_HOME/lib64:$LD_LIBRARY_PATH
 export HF_HOME=/root/hf-cache
+export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
 
 export OUTPUT_PATH=$1
 export NNODES=$2
@@ -15,6 +16,7 @@ export MASTER_PORT=$5
 export RANK=$6
 export IP_TO_RANK_MAPPING=$7
 export MODEL=$8
+
 echo "output_path: $OUTPUT_PATH"
 echo "n_nodes: $NNODES"
 echo "n_proc: $N_PROC"

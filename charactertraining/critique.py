@@ -162,7 +162,7 @@ def inference(
     sampling_params = SamplingParams(
         max_tokens=args.max_new_tokens,
         top_p=0.5,
-        temperature=1.5,
+        temperature=1.25,
         repetition_penalty=1.0,
         skip_special_tokens=False,
         truncate_prompt_tokens=args.prompt_max_len,
@@ -250,7 +250,7 @@ Respond directly to the original message, without any additional commentary."""
     # use a higher temperature for rephrasing
     sampling_params = SamplingParams(
         max_tokens=args.max_new_tokens,
-        top_p=1.0,
+        top_p=0.7,
         temperature=1.0,
         repetition_penalty=1.0,
         skip_special_tokens=False,
