@@ -12,3 +12,4 @@ saves/
 ckpts/
 
 charactertraining/constants.py
+charactertraining/sandbox.ipynb
