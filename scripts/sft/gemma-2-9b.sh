@@ -6,6 +6,7 @@ export LIBRARY_PATH=$CUDA_HOME/lib64:$LIBRARY_PATH
 export PATH=$CUDA_HOME/bin:$PATH
 export LD_LIBRARY_PATH=$CUDA_HOME/lib64:$LD_LIBRARY_PATH
 export HF_HOME=/root/hf-cache
+export DS_ACCELERATOR=cuda
 
 export OUTPUT_PATH=$1
 export NNODES=$2
@@ -48,7 +49,7 @@ openrlhf.cli.train_sft \
     --seed 123456 \
     --zero_stage 2 \
     --bf16 \
-    --max_epochs 10 \
+    --max_epochs 5 \
     --pretrain /root/hf-cache/gemma-2-9b-it \
     --dataset /root/mats/CharacterTraining/data/sft/gemma-2-9b.jsonl \
     --input_key messages \
@@ -59,6 +60,13 @@ openrlhf.cli.train_sft \
     --wandb_run_name sft-gemma-2-9b
 EOF
 
+(
+    echo "script will automatically terminate after 1 hour"
+    sleep 3600  # sleep for 1 hour (3600 seconds)
+    echo "time limit reached (1 hour). terminating script..."
+    kill -9 $$  # kill the current script process
+) &
+TIMEOUT_PID=$!
 
 deepspeed \
 --no_ssh \
@@ -71,5 +79,23 @@ deepspeed \
 --module $training_commands
 
 if [ $? -eq 0 ]; then
-    sleep 9m
+    python -c '
+import os
+import datetime
+from huggingface_hub import login, HfApi
+current_time = datetime.datetime.now().strftime("%d%m%Y_%H%M%S")
+OUTPUT_PATH = os.environ["OUTPUT_PATH"]
+SAVE_PATH = f"{OUTPUT_PATH}/saves"
+login(new_session=False)
+api = HfApi()
+model_name = f"sft-gemma-2-9b-{current_time}"
+api.create_repo(repo_id=f"maius/{model_name}")
+api.upload_folder(
+    folder_path=SAVE_PATH,
+    repo_id=f"maius/{model_name}",
+    repo_type="model"
+)
+'
 fi
+
+kill $TIMEOUT_PID 2>/dev/null || true

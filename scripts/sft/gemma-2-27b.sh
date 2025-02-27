@@ -6,6 +6,7 @@ export LIBRARY_PATH=$CUDA_HOME/lib64:$LIBRARY_PATH
 export PATH=$CUDA_HOME/bin:$PATH
 export LD_LIBRARY_PATH=$CUDA_HOME/lib64:$LD_LIBRARY_PATH
 export HF_HOME=/root/hf-cache
+export DS_ACCELERATOR=cuda
 
 export OUTPUT_PATH=$1
 export NNODES=$2
@@ -43,22 +44,32 @@ openrlhf.cli.train_sft \
     --ckpt_path ${OUTPUT_PATH}/ckpts \
     --eval_steps 50 \
     --max_ckpt_num 1 \
-    --micro_train_batch_size 1 \
-    --train_batch_size 32 \
+    --micro_train_batch_size 2 \
+    --train_batch_size 48 \
     --seed 123456 \
-    --zero_stage 2 \
+    --zero_stage 3 \
+    --adam_offload \
+    --gradient_checkpointing \
     --bf16 \
-    --max_epochs 10 \
-    --pretrain /root/hf-cache/gemma-2-2b-it \
-    --dataset /root/mats/CharacterTraining/data/sft/gemma-2-2b.jsonl \
+    --max_epochs 5 \
+    --pretrain /data/e02cf067-caa7-4a1e-8850-c5e4448d0fdf/gemma-2-27b-it \
+    --dataset /root/mats/CharacterTraining/data/sft/gemma-2-27b.jsonl \
     --input_key messages \
     --apply_chat_template \
     --max_len 4096 \
     --use_wandb True \
     --wandb_project CharacterTraining \
-    --wandb_run_name sft-gemma-2-2b
+    --wandb_run_name sft-gemma-2-27b
 EOF
 
+
+(
+    echo "script will automatically terminate after 1 hour"
+    sleep 3600  # sleep for 1 hour (3600 seconds)
+    echo "time limit reached (1 hour). terminating script..."
+    kill -9 $$  # kill the current script process
+) &
+TIMEOUT_PID=$!
 
 deepspeed \
 --no_ssh \
@@ -71,5 +82,37 @@ deepspeed \
 --module $training_commands
 
 if [ $? -eq 0 ]; then
-    sleep 2m
+    python -c '
+import os, json, datetime
+from pathlib import Path
+from huggingface_hub import login, HfApi
+
+current_time = datetime.datetime.now().strftime("%d%m%Y_%H%M%S")
+OUTPUT_PATH = os.environ["OUTPUT_PATH"]
+SAVE_PATH = f"{OUTPUT_PATH}/saves"
+
+# update README.md with correct base_model before uploading
+readme_path = Path(SAVE_PATH) / "README.md"
+if readme_path.exists():
+    with open(readme_path, "r") as f:
+        content = f.read()
+    # Replace the base_model line
+    content = content.replace(
+        "base_model: /data/e02cf067-caa7-4a1e-8850-c5e4448d0fdf/gemma-2-27b-it", 
+        "base_model: google/gemma-2-27b-it"
+    )
+    with open(readme_path, "w") as f:
+        f.write(content)
+login(new_session=False)
+api = HfApi()
+model_name = f"lora-sft-gemma-2-27b-{current_time}"
+api.create_repo(repo_id=f"maius/{model_name}")
+api.upload_folder(
+    folder_path=SAVE_PATH,
+    repo_id=f"maius/{model_name}",
+    repo_type="model"
+)
+'
 fi
+
+kill $TIMEOUT_PID 2>/dev/null || true
