@@ -99,7 +99,7 @@ class ChatSession:
         
         # generate the full response
         outputs = self.llm.generate(prompt, self.sampling_params, use_tqdm=False)
-        response_text = outputs[0].outputs[0].text
+        response_text = outputs[0].outputs[0].text.strip()
         print(f"Assistant: {response_text}")
         print()
         
