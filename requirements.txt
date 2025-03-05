@@ -11,11 +11,9 @@ packaging
 peft
 ray[default]
 tensorboard
-torch
 torchmetrics
 tqdm
 transformers
 transformers_stream_generator
 wandb
 wheel
-vllm
