@@ -18,3 +18,4 @@ transformers
 transformers_stream_generator
 wandb
 wheel
+vllm
