@@ -2,6 +2,7 @@ import argparse
 
 import torch as t
 from vllm import LLM, SamplingParams
+from vllm.lora.request import LoRARequest
 from transformers import AutoTokenizer
 
 def parse_args():
@@ -42,6 +43,16 @@ def parse_args():
         default=t.cuda.device_count(),
         help="number of gpus to use for tensor parallelism"
     )
+    parser.add_argument(
+        "--lora",
+        action="store_true",
+        help="use LoRA adapter with the base model"
+    )
+    parser.add_argument(
+        "--adapter",
+        type=str,
+        help="path or HF repo of LoRA adapter to apply to the base model"
+    )
     return parser.parse_args()
 
 
@@ -53,23 +64,34 @@ class ChatSession:
         temperature: float = 0.7,
         top_p: float = 0.9,
         gpu_memory_utilization: float = 0.9,
-        tensor_parallel_size: int = 1
+        tensor_parallel_size: int = 1,
+        lora: bool = False,
+        adapter: str = None
     ):
         self.model = model
         self.max_tokens = max_tokens
         self.temperature = temperature
         self.top_p = top_p
+        self.lora = lora
 
         # load tokenizer
         self.tokenizer = AutoTokenizer.from_pretrained(model, trust_remote_code=True)
         
         print(f"loading model: {model}")
-        self.llm = LLM(
-            model=model,
-            gpu_memory_utilization=gpu_memory_utilization,
-            tensor_parallel_size=tensor_parallel_size,
-            trust_remote_code=True,
-        )
+        llm_kwargs = {
+            "model": model,
+            "gpu_memory_utilization": gpu_memory_utilization,
+            "tensor_parallel_size": tensor_parallel_size,
+            "trust_remote_code": True,
+        }
+        
+        if self.lora and adapter:
+            print(f"applying LoRA adapter: {adapter}")
+            llm_kwargs["enable_lora"] = True
+            llm_kwargs["max_lora_rank"] = 32
+            self.adapter_path = adapter
+        
+        self.llm = LLM(**llm_kwargs)
         
         self.history = []
         
@@ -98,8 +120,17 @@ class ChatSession:
         prompt = self.format_prompt()
         
         # generate the full response
-        outputs = self.llm.generate(prompt, self.sampling_params, use_tqdm=False)
+        if self.lora:
+            outputs = self.llm.generate(
+                prompt,
+                self.sampling_params,
+                use_tqdm=False,
+                lora_request=LoRARequest("adapter", 1, lora_path=self.adapter_path)
+            )
+        else:
+            outputs = self.llm.generate(prompt, self.sampling_params, use_tqdm=False)
         response_text = outputs[0].outputs[0].text.strip()
+        print()
         print(f"Assistant: {response_text}")
         print()
         
@@ -112,6 +143,11 @@ class ChatSession:
 def main():
     args = parse_args()
     
+    # check if lora is enabled but adapter is not provided
+    if args.lora and not args.adapter:
+        print("Error: --adapter must be provided when using --lora")
+        return
+    
     # initialize chat session
     session = ChatSession(
         model=args.model,
@@ -119,7 +155,9 @@ def main():
         temperature=args.temperature,
         top_p=args.top_p,
         gpu_memory_utilization=args.gpu_memory_utilization,
-        tensor_parallel_size=args.tensor_parallel_size
+        tensor_parallel_size=args.tensor_parallel_size,
+        lora=args.lora,
+        adapter=args.adapter
     )
     
     print(f"interactive session with {args.model}")
