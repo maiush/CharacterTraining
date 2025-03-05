@@ -5,7 +5,7 @@ wandb login $WANDB_TOKEN
 
 read -r -d '' training_commands <<EOF
 openrlhf.cli.train_sft \
-    --save_path /workspace/gemma-2-2b-base-evaluator \
+    --save_path /workspace/gemma-2-2b-blended-heavy-evaluator \
     --eval_steps 50 \
     --max_ckpt_num 1 \
     --micro_train_batch_size 1 \
@@ -14,7 +14,7 @@ openrlhf.cli.train_sft \
     --zero_stage 2 \
     --bf16 \
     --max_epochs 1 \
-    --pretrain google/gemma-2-2b \
+    --pretrain maius/gemma-2-2b-blended-heavy \
     --learning_rate 5e-6 \
     --lora_rank 32 \
     --lora_alpha 16 \
@@ -25,13 +25,13 @@ openrlhf.cli.train_sft \
     --max_len 4096 \
     --use_wandb True \
     --wandb_project CharacterTraining \
-    --wandb_run_name evaluator-gemma-2-2b-base
+    --wandb_run_name evaluator-gemma-2-2b-blended-heavy
 EOF
 
 
 deepspeed \
 --module $training_commands
 
-python upload_model.py --model gemma-2-2b-base-evaluator
-
+cd /workspace/CharacterTraining/tools
+python upload_model.py --model gemma-2-2b-blended-heavy-evaluator
 rm -rf /workspace/scripts/evaluator/wandb

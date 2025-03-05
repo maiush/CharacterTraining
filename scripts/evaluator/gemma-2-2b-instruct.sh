@@ -32,6 +32,6 @@ EOF
 deepspeed \
 --module $training_commands
 
+cd /workspace/CharacterTraining/tools
 python upload_model.py --model gemma-2-2b-it-evaluator
-
 rm -rf /workspace/scripts/evaluator/wandb
