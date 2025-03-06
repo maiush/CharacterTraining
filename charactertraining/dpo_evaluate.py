@@ -81,8 +81,8 @@ def evaluate(
             prompts.append(fs_prompt)        
         return prompts
 
-    # gen inference args
-    args = gen_args(generator, evaluator, max_new_tokens=1, **kwargs)
+    # gen inference args (low temperature for evaluation)
+    args = gen_args(generator, evaluator, max_new_tokens=1, temperature=0.1, **kwargs)
     # configure strategy
     class Empty:
         pass

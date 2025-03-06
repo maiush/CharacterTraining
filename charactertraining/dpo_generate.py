@@ -52,8 +52,8 @@ def generate(
     # only keep user messages
     dataset["messages"] = dataset["messages"].apply(lambda x: [x[0]])
 
-    # gen inference args
-    args = gen_args(generator, evaluator, **kwargs)
+    # gen inference args (high temperature, top-p for sampling)
+    args = gen_args(generator, evaluator, temperature=1.25, top_p=1.0, **kwargs)
     # configure strategy
     class Empty:
         pass
