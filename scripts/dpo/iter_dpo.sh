@@ -3,8 +3,6 @@ huggingface-cli login --token $HF_TOKEN
 wandb login $WANDB_TOKEN
 
 
-
-
 # Loop through the DPO process 5 times
 for i in {1..5}; do
     echo "starting DPO iteration $i of 5"
@@ -12,7 +10,7 @@ for i in {1..5}; do
 
     # paired generations from the GENERATOR
     python dpo_generate.py \
-        --N 100 \
+        --N 5000 \
         --generator /workspace/models/gemma-2-9b-generator \
         --evaluator /workspace/models/gemma-2-9b-evaluator
 
@@ -30,18 +28,18 @@ openrlhf.cli.train_dpo \
     --eval_steps 50 \
     --max_ckpt_num 1 \
     --micro_train_batch_size 1 \
-    --train_batch_size 64 \
+    --train_batch_size 128 \
     --gradient_checkpointing \
     --seed 123456 \
     --zero_stage 0 \
     --bf16 \
     --learning_rate 1e-4 \
-    --l2 1e-2 \
     --lora_rank 32 \
     --lora_alpha 16 \
-    --max_epochs 1 \
+    --max_epochs 3 \
     --pretrain /workspace/models/gemma-2-9b-generator \
-    --dataset /workspace/CharacterTraining/data/dpo/current_dpo.jsonl \
+    --dataset /workspace/CharacterTraining/data/dpo/current_dpo.jsonl,/workspace/CharacterTraining/data/generator/gemma-2-9b.jsonl \
+    --dataset_probs 0.9,0.1 \
     --chosen_key chosen \
     --rejected_key rejected \
     --apply_chat_template \
@@ -66,6 +64,14 @@ EOF
         --output_path /workspace/models/gemma-2-9b-generator
     # remove lora directory
     rm -rf /workspace/models/gemma-2-9b-dpo
+    # upload the final model
+    cd /workspace/CharacterTraining/tools
+    python upload_model.py \
+        --model gemma-2-9b-generator \
+        --name gemma-2-9b-generator-iter-$i
     
     echo "finished DPO iteration $i of 5"
 done
+
+# when done, terminate the pod
+runpodctl remove pod 2dwxpfnyhmi53k
