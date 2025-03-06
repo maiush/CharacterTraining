@@ -3,6 +3,15 @@ huggingface-cli login --token $HF_TOKEN
 wandb login $WANDB_TOKEN
 
 
+(
+    echo "script will automatically terminate after 3 hours"
+    sleep 10800  # sleep for 3 hours (10800 seconds)
+    echo "time limit reached (3 hours). terminating pod..."
+    runpodctl remove pod 2dwxpfnyhmi53k  # terminate the pod
+) &
+TIMEOUT_PID=$!
+
+
 # Loop through the DPO process 5 times
 for i in {1..5}; do
     echo "starting DPO iteration $i of 5"
