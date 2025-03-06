@@ -49,7 +49,10 @@ def evaluate(
         if reverse:
             choice1, choice2 = choice2, choice1
         prompts = []
-        for principle in con["trait"].unique():
+        # randomly sample ten traits to evaluate against
+        traits = con["trait"].unique()
+        traits = random.sample(list(traits), 10)
+        for principle in traits:
             main_q = evaluator_template.format(
                 principle=principle,
                 question=main_question,
@@ -73,10 +76,8 @@ def evaluate(
                 formatted_questions.append(fq)
                 answers.append(answer)
             for q, a in zip(formatted_questions, answers):
-                fs_prompt.append(
-                    {"role": "user", "content": q},
-                    {"role": "assistant", "content": a}
-                )
+                fs_prompt.append({"role": "user", "content": q})
+                fs_prompt.append({"role": "assistant", "content": a})
             fs_prompt.append({"role": "user", "content": main_q})
             prompts.append(fs_prompt)        
         return prompts
