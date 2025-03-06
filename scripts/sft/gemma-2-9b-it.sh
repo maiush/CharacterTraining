@@ -50,4 +50,6 @@ if [ $? -eq 0 ]; then
     # upload model
     cd /workspace/CharacterTraining/tools
     python upload_model.py --model gemma-2-9b-evaluator --name gemma-2-9b-evaluator-0603
+    # upload lora
+    python upload_model.py --model gemma-2-9b-it-lora --name gemma-2-9b-it-lora-0603
 fi
