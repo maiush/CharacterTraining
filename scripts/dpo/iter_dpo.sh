@@ -4,19 +4,19 @@ wandb login $WANDB_TOKEN
 
 
 # loop through the DPO process 5 times
-for i in {1..5}; do
-    echo "starting DPO iteration $i of 5"
+for i in {1..10}; do
+    echo "starting DPO iteration $i of 10"
 
     cd /workspace/CharacterTraining/charactertraining
     # paired generations from the GENERATOR
     python dpo_generate.py \
         --N 1000 \
-        --generator /workspace/models/gemma-2-9b-generator \
+        --generator /workspace/models/gemma-2-9b-generator-snapshot \
         --evaluator /workspace/models/gemma-2-9b-evaluator
     # ratings against the constitution from the EVALUATOR
     python dpo_evaluate.py \
         --dataset /workspace/CharacterTraining/data/dpo/current_gen.jsonl \
-        --generator /workspace/models/gemma-2-9b-generator \
+        --generator /workspace/models/gemma-2-9b-generator-snapshot \
         --evaluator /workspace/models/gemma-2-9b-evaluator
 
     # round of DPO
@@ -37,7 +37,7 @@ openrlhf.cli.train_dpo \
     --adam_betas 0.9 0.98 \
     --lora_rank 32 \
     --lora_alpha 16 \
-    --max_epochs 3 \
+    --max_epochs 1 \
     --pretrain /workspace/models/gemma-2-9b-blend \
     --ref_pretrain /workspace/models/gemma-2-9b-blend \
     --load_lora_adapter /workspace/models/gemma-2-9b-generator-lora \
@@ -64,18 +64,19 @@ EOF
     cd /workspace/CharacterTraining/tools
     python upload_model.py \
         --model gemma-2-9b-generator-lora \
-        --name gemma-2-9b-generator-lora-0603-iter-$i    
-    echo "finished DPO iteration $i of 5"
+        --name gemma-2-9b-generator-lora-0603-iter-$i
+    # build the snapshot for the next generation step (first remove the old snapshot)
+    rm -rf /workspace/models/gemma-2-9b-generator-snapshot
+    cd /workspace/CharacterTraining/openrlhf/openrlhf/cli
+    python lora_combiner.py \
+        --model_path /workspace/models/gemma-2-9b-blend \
+        --lora_path /workspace/models/gemma-2-9b-generator-lora \
+        --output_path /workspace/models/gemma-2-9b-generator-snapshot
+    echo "finished DPO iteration $i of 10"
 done
 
-# merge the final model
-cd /workspace/CharacterTraining/openrlhf/openrlhf/cli
-python lora_combiner.py \
-    --model_path /workspace/models/gemma-2-9b-blend \
-    --lora_path /workspace/models/gemma-2-9b-generator-lora \
-    --output_path /workspace/models/gemma-2-9b-generator
 # upload to huggingface
 cd /workspace/CharacterTraining/tools
 python upload_model.py \
-    --model gemma-2-9b-generator \
+    --model gemma-2-9b-generator-snapshot \
     --name gemma-2-9b-generator-0603
