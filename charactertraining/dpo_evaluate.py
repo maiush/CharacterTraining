@@ -1,4 +1,4 @@
-import argparse, json
+import argparse, json, random
 import pandas as pd
 from transformers import AutoTokenizer
 from vllm import LLM, SamplingParams
@@ -45,19 +45,40 @@ def evaluate(
         con = json.load(f)
     con = pd.DataFrame(con)
 
-    def gen_eval_prompts(question, choice1, choice2, reverse=False):
+    def gen_eval_prompts(revisions, main_question, choice1, choice2, reverse=False):
         if reverse:
             choice1, choice2 = choice2, choice1
         prompts = []
         for principle in con["trait"].unique():
-            prompt = evaluator_template.format(
+            main_q = evaluator_template.format(
                 principle=principle,
-                question=question,
+                question=main_question,
                 choice1=choice1,
                 choice2=choice2
             )
-            prompt = [{"role": "user", "content": prompt}]
-            prompts.append(prompt)
+            fs_prompt = []
+            questions = con.loc[con["trait"] == principle, "questions"].item()
+            formatted_questions, answers = [], []
+            for question in questions:
+                sample = revisions[revisions["question"] == question].sample(1)
+                A, B = sample["initial"].item(), sample["revisions"].item()
+                p = random.random()
+                fq = evaluator_template.format(
+                    principle=principle,
+                    question=question,
+                    choice1=A if p < 0.5 else B,
+                    choice2=B if p < 0.5 else A
+                )
+                answer = "B" if p < 0.5 else "A"
+                formatted_questions.append(fq)
+                answers.append(answer)
+            for q, a in zip(formatted_questions, answers):
+                fs_prompt.append(
+                    {"role": "user", "content": q},
+                    {"role": "assistant", "content": a}
+                )
+            fs_prompt.append({"role": "user", "content": main_q})
+            prompts.append(fs_prompt)        
         return prompts
 
     # gen inference args
@@ -96,14 +117,19 @@ def evaluate(
         logprobs=20
     )
 
-    # create one huge list of prompts
+    # create one huge list of few-shot prompts
+    model_name = evaluator.split("/")[-1]
+    idx = model_name.index("b-")
+    model_name = model_name[:idx+1]
+    revisions_path = f"/workspace/CharacterTraining/data/generator/{model_name}.jsonl"
+    revisions = pd.read_json(revisions_path, orient="records", lines=True)
     all_prompts = []
     row_indices = []    
     for idx, row in dataset.iterrows():
         question = row["question"]
         choice1 = row["choice1"]
         choice2 = row["choice2"]
-        prompts = gen_eval_prompts(question, choice1, choice2, reverse=False)
+        prompts = gen_eval_prompts(revisions, question, choice1, choice2, reverse=False)
         # add the row index K times (once for each prompt)
         row_indices.extend([idx] * len(prompts))
         all_prompts.extend(prompts)
