@@ -10,7 +10,7 @@ def parse_args():
     parser.add_argument(
         "--model", 
         type=str, 
-        default="/scratch/models/gemma-2-2b-it",
+        default="/workspace/models/gemma-2-2b-it",
         help="model name or path to load"
     )
     parser.add_argument(
@@ -162,6 +162,7 @@ def main():
     
     print(f"interactive session with {args.model}")
     print("type 'exit', 'quit', or press Ctrl+D to end the session")
+    print("type 'new', 'reset', or 'clear' to start a fresh chat session")
     print("=" * 50)
     
     try:
@@ -170,6 +171,10 @@ def main():
                 user_input = input("User: ")
                 if user_input.lower() in ["exit", "quit"]:
                     break
+                if user_input.lower() in ["new", "reset", "clear"]:
+                    print("\nStarting a fresh chat session...")
+                    session.history = []
+                    continue
                 session.chat(user_input)
             except KeyboardInterrupt:
                 print("\nuse Ctrl+D or type 'exit' to exit")
