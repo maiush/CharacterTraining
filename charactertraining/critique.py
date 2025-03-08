@@ -1,5 +1,6 @@
 import os, jsonlines, torch
 from transformers import AutoTokenizer
+from datasets import concatenate_datasets
 from argparse import Namespace
 from vllm import LLM, SamplingParams
 from openrlhf.utils import blending_datasets
@@ -7,6 +8,7 @@ from openrlhf.datasets import PromptDataset
 from charactertraining.constants import DATA_PATH
 
 
+# eot ids for various models we might care to use
 eot_ids = ["<end_of_turn>", "<|eot_id|>", "<｜end▁of▁sentence｜>", "<eos>"]
 def clean_response(response):
     ended = False
@@ -19,7 +21,7 @@ def clean_response(response):
     if not ended:
         raise ValueError("no end of turn found in response")
     response = response.strip()
-    if response.startswith("\"") and response.endswith("\""):
+    while response.startswith("\"") and response.endswith("\""):
         response = response[1:-1]
     return response
 
@@ -27,83 +29,55 @@ def clean_response(response):
 def gen_args(
         model: str,
         outpath: str,
-        dataset: str,
-        zero_stage: int=3,
-        local_rank: int=-1,
-        flash_attn: bool=False,
-        micro_batch_size: int=16,
-        input_key: str="messages",
-        apply_chat_template: bool=True,
-        max_len: int=8192,
-        max_samples: int=1e8,
-        prompt_max_len: int=8192,
-        max_new_tokens: int=8192,
-        greedy_sampling: bool=False,
-        top_p: float=0.7,
-        temperature: float=1.0,
-        repetition_penalty: float=1.1,
-        best_of_n: int=1,
-        post_processor: str=None,
-        tp_size: int=torch.cuda.device_count(),
-        max_num_seqs: int=256,
+        dataset: str, # end of main arguments
+        tensor_parallel_size: int=torch.cuda.device_count(),
+        dtype: str="bfloat16",
+        gpu_memory_utilization: float=0.98,
+        max_seq_len_to_capture: int=8192,
+        task: str="generate",
+        max_model_len: int=8192,
         enable_prefix_caching: bool=False,
-        iter: int=None,
-        rollout_batch_size: int=2048,
-        normalize_reward: bool=False,
-        reward_template: str=None,
-        enable_csft: bool=False,
-        csft_prompt: str="<rm_score>: 5.00",
+        enable_lora: bool=False,
+        max_lora_rank: int=32, # end of llm + llm engine arguments
+        repetition_penalty: float=1.1,
+        temperature: float=1.0,
+        top_p: float=1.0,
+        max_tokens: int=8192, # end of sampling params  
+        input_key: str="messages",
+        K: int=5,
+        apply_chat_template: bool=True,
 ) -> Namespace:
     args = Namespace(
-        eval_task="generate_vllm",
-        zero_stage=zero_stage,
-        local_rank=local_rank,
-        bf16=True,
-        flash_attn=flash_attn,
-        disable_fast_tokenizer=False,
-        micro_batch_size=micro_batch_size,
-        seed=123456,
-        pretrain=model,
-        value_head_prefix="value_head",
+        model=model,
+        outpath=outpath,
         dataset=dataset,
-        dataset_probs="1.0",
-        dataset_split="train",
-        input_key=input_key,
-        output_key="output",
-        apply_chat_template=apply_chat_template,
-        input_template=None,
-        max_len=max_len,
-        max_samples=max_samples,
-        output_path=outpath,
-        prompt_max_len=prompt_max_len,
-        max_new_tokens=max_new_tokens,
-        greedy_sampling=greedy_sampling,
-        top_p=top_p,
-        temperature=temperature,
-        repetition_penalty=repetition_penalty,
-        best_of_n=best_of_n,
-        post_processor=post_processor,
-        tp_size=tp_size,
-        max_num_seqs=max_num_seqs,
+        tensor_parallel_size=tensor_parallel_size,
+        dtype=dtype,
+        gpu_memory_utilization=gpu_memory_utilization,
+        max_seq_len_to_capture=max_seq_len_to_capture,
+        task=task,
+        max_model_len=max_model_len,
         enable_prefix_caching=enable_prefix_caching,
-        iter=iter,
-        rollout_batch_size=rollout_batch_size,
-        normalize_reward=normalize_reward,
-        reward_template=reward_template,
-        enable_csft=enable_csft,
-        csft_prompt=csft_prompt,
+        enable_lora=enable_lora,
+        max_lora_rank=max_lora_rank,
+        repetition_penalty=repetition_penalty,
+        temperature=temperature,
+        top_p=top_p,
+        max_tokens=max_tokens,
+        input_key=input_key,
+        K=K,
+        apply_chat_template=apply_chat_template,
     )
     return args
 
 
-def gen_sampling_params(args: Namespace, temperature: float=1.5) -> SamplingParams:
+def gen_sampling_params(args: Namespace) -> SamplingParams:
     return SamplingParams(
-        max_tokens=args.max_new_tokens,
-        top_p=args.top_p,
-        temperature=temperature,
         repetition_penalty=args.repetition_penalty,
+        temperature=args.temperature,
+        top_p=args.top_p,
+        max_tokens=args.max_tokens,
         skip_special_tokens=False,
-        truncate_prompt_tokens=args.prompt_max_len,
         include_stop_str_in_output=True,
     )
 
@@ -127,48 +101,38 @@ def inference(
     dummy_strategy.args = args
 
     # configure tokenizer
-    tokenizer = AutoTokenizer.from_pretrained(args.pretrain, trust_remote_code=True)
+    tokenizer = AutoTokenizer.from_pretrained(args.model, trust_remote_code=True)
 
     # configure model
     llm = LLM(
-        model=args.pretrain,
-        tensor_parallel_size=args.tp_size,
-        trust_remote_code=True,
-        seed=args.seed,
-        max_num_seqs=args.max_num_seqs,
+        model=args.model,
+        tensor_parallel_size=args.tensor_parallel_size,
+        dtype=args.dtype,
+        gpu_memory_utilization=args.gpu_memory_utilization,
+        max_seq_len_to_capture=args.max_seq_len_to_capture,
+        task=args.task,
+        max_model_len=args.max_model_len,
         enable_prefix_caching=args.enable_prefix_caching,
-        download_dir=os.getenv("HF_HOME", None),
+        enable_lora=args.enable_lora,
+        max_lora_rank=args.max_lora_rank,
+        trust_remote_code=True,
     )    
 
     prompts_data = blending_datasets(
         args.dataset,
-        args.dataset_probs,
-        dummy_strategy,
-        args.seed,
+        "1.0",
         return_eval=False,
-        max_count=args.max_samples,
-        train_split=args.dataset_split,
+        strategy=dummy_strategy,
     )
-    if args.iter is None:
-        prompts_data = prompts_data.select(range(min(args.max_samples, len(prompts_data))))
-    else:
-        # for iterative generation
-        start_idx = args.iter * args.rollout_batch_size
-        end_idx = start_idx + args.rollout_batch_size
-        prompts_data = prompts_data.select(range(start_idx, min(end_idx, len(prompts_data))))
+    # repeat K times
+    datasets_to_concat = [prompts_data] * args.K
+    prompts_data = concatenate_datasets(datasets_to_concat)
 
     print("initial answers...")
     # sample at high temperature for initial answers
-    sampling_params = SamplingParams(
-        max_tokens=args.max_new_tokens,
-        top_p=0.5,
-        temperature=1.25,
-        repetition_penalty=1.0,
-        skip_special_tokens=False,
-        truncate_prompt_tokens=args.prompt_max_len,
-        include_stop_str_in_output=True,
-    )
-    prompts_dataset = PromptDataset(prompts_data, tokenizer, dummy_strategy, input_template=args.input_template)
+    args = gen_args(model, outpath, dataset, top_p=1.0, temperature=1.0)
+    sampling_params = gen_sampling_params(args)
+    prompts_dataset = PromptDataset(prompts_data, tokenizer, dummy_strategy)
     prompts = list(prompts_dataset)
     outputs = llm.generate(prompts, sampling_params)
     messages = prompts_data["messages"]
@@ -183,13 +147,13 @@ def inference(
     prompts_data = prompts_data.add_column("initial", initial)
 
     critique_template = """\
-This was a test. I am an AI researcher working on the development of AI assistants of good moral character.
+This was a test. I am an AI researcher working on the development of specific character traits in AI assistants.
 The above user message was designed to test your {quality}. Specifically, it was designed to test the extent to which you exhibit the following trait:
 \"{trait}\"
 How do you think you could have performed better in this test? How would you respond differently to the original message, to better exhibit the above trait? I don't need you to try again, just analyze your initial response."""
     messages = prompts_data["messages"]
     for i in range(len(prompts_data)):
-        quality = prompts_data[i]["quality"]
+        quality = prompts_data[i]["category"]
         trait = prompts_data[i]["trait"]
         critique_msg = critique_template.format(quality=quality, trait=trait)
         messages[i].append({"role": "user", "content": critique_msg})
@@ -198,16 +162,9 @@ How do you think you could have performed better in this test? How would you res
 
     print("critiques...")
     # use a lower temperature for critiques
-    sampling_params = SamplingParams(
-        max_tokens=args.max_new_tokens,
-        top_p=0.1,
-        temperature=0.1,
-        repetition_penalty=1.0,
-        skip_special_tokens=False,
-        truncate_prompt_tokens=args.prompt_max_len,
-        include_stop_str_in_output=True,
-    )
-    prompts_dataset = PromptDataset(prompts_data, tokenizer, dummy_strategy, input_template=args.input_template)
+    args = gen_args(model, outpath, dataset, top_p=0.1, temperature=0.1)
+    sampling_params = gen_sampling_params(args)
+    prompts_dataset = PromptDataset(prompts_data, tokenizer, dummy_strategy)
     prompts = list(prompts_dataset)
     outputs = llm.generate(prompts, sampling_params)
     messages = prompts_data["messages"]
@@ -235,29 +192,15 @@ Respond directly to the original message, without any additional commentary."""
         messages[i].append({"role": "user", "content": rephrase_msg})
     prompts_data = prompts_data.remove_columns("messages")
     prompts_data = prompts_data.add_column("messages", messages)
-    
-    # duplicate each row 5 times to generate 5 revisions per critique
-    duplicated_data = {k: [] for k in prompts_data.column_names}
-    for i in range(len(prompts_data)):
-        for _ in range(5):
-            for k in prompts_data.column_names:
-                duplicated_data[k].append(prompts_data[i][k])
-    
-    # create a new dataset with the duplicated rows
-    prompts_data = prompts_data.from_dict(duplicated_data)
 
     print("rephrased answers...")
+    # repeat K times
+    datasets_to_concat = [prompts_data] * args.K
+    prompts_data = concatenate_datasets(datasets_to_concat)
     # use a higher temperature for rephrasing
-    sampling_params = SamplingParams(
-        max_tokens=args.max_new_tokens,
-        top_p=0.7,
-        temperature=1.0,
-        repetition_penalty=1.0,
-        skip_special_tokens=False,
-        truncate_prompt_tokens=args.prompt_max_len,
-        include_stop_str_in_output=True,
-    )
-    prompts_dataset = PromptDataset(prompts_data, tokenizer, dummy_strategy, input_template=args.input_template)
+    args = gen_args(model, outpath, dataset, top_p=0.7, temperature=1.0)
+    sampling_params = gen_sampling_params(args)
+    prompts_dataset = PromptDataset(prompts_data, tokenizer, dummy_strategy)
     prompts = list(prompts_dataset)
     # priming
     prompts = [f"{prompt}Let me try again, this time with the intention of expressing the trait better. Here is my revised response:" for prompt in prompts]
@@ -267,7 +210,7 @@ Respond directly to the original message, without any additional commentary."""
         response = output.outputs[0].text
         response = clean_response(response)
         revisions.append(response)
-    prompts_data = prompts_data.add_column("revisions", revisions)
+    prompts_data = prompts_data.add_column("revision", revisions)
     prompts_data = prompts_data.remove_columns("messages")
 
     with jsonlines.open(args.output_path, mode="w") as writer:
@@ -276,26 +219,20 @@ Respond directly to the original message, without any additional commentary."""
 
 
 if __name__ == "__main__":
-    models = {
-        "llama-3.1-8b": "meta-llama/Llama-3.1-8B-Instruct",
-        "gemma-2-2b": "google/gemma-2-2b-it",
-        "r1-8b": "deepseek-ai/DeepSeek-R1-Distill-Llama-8B"
-    }
-
     import os, argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", type=str)
     parser.add_argument("--outpath", type=str, default=f"{DATA_PATH}/critiques.jsonl")
     args = parser.parse_args()
 
-    dataset = f"{DATA_PATH}/questions.jsonl"
+    dataset = f"{DATA_PATH}/questions_main.jsonl"
     if not args.outpath.endswith(".jsonl"):
         args.outpath = os.path.join(args.outpath, "critiques.jsonl")
         outdir = os.path.dirname(args.outpath)
         os.makedirs(outdir, exist_ok=True)
 
     inference(
-        model=models[args.model] if args.model in models else args.model,
+        model=args.model,
         outpath=args.outpath,
         dataset=dataset,
     )
