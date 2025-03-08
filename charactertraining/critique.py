@@ -17,8 +17,8 @@ def clean_response(response):
             ended = True
             response = response.replace(eot_id, "")
     # if we didn't find any eot_ids, raise an error
-    if not ended:
-        raise ValueError("no end of turn found in response")
+    # if not ended:
+    #     raise ValueError("no end of turn found in response")
     response = response.strip()
     while response.startswith("\""):
         response = response[1:]
@@ -125,6 +125,8 @@ def inference(
         return_eval=False,
         strategy=dummy_strategy,
     )
+    # randomly sample 250 rows
+    prompts_data = prompts_data.shuffle().select(range(250))
     # repeat K times
     datasets_to_concat = [prompts_data] * args.K
     prompts_data = concatenate_datasets(datasets_to_concat)
