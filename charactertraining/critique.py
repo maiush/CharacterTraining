@@ -87,6 +87,7 @@ def inference(
         model: str,
         outpath: str,
         dataset: str,
+        n_samples: int=None,
         **kwargs,
 ) -> None:
     # gen inference args
@@ -125,8 +126,9 @@ def inference(
         return_eval=False,
         strategy=dummy_strategy,
     )
-    # randomly sample 250 rows
-    prompts_data = prompts_data.shuffle().select(range(250))
+    # randomly sample n_samples rows
+    if n_samples is not None:
+        prompts_data = prompts_data.shuffle().select(range(n_samples))
     # repeat K times
     datasets_to_concat = [prompts_data] * args.K
     prompts_data = concatenate_datasets(datasets_to_concat)
@@ -250,6 +252,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", type=str)
     parser.add_argument("--outpath", type=str, default=f"{DATA_PATH}/critiques.jsonl")
+    parser.add_argument("--n-samples", type=int, default=None, required=False)
     args = parser.parse_args()
 
     dataset = f"{DATA_PATH}/questions_main.jsonl"
@@ -262,4 +265,5 @@ if __name__ == "__main__":
         model=args.model,
         outpath=args.outpath,
         dataset=dataset,
+        n_samples=args.n_samples,
     )
