@@ -12,17 +12,18 @@ from charactertraining.constants import DATA_PATH
 eot_ids = ["<end_of_turn>", "<|eot_id|>", "<｜end▁of▁sentence｜>", "<eos>"]
 def clean_response(response):
     ended = False
-    for eot_id in eot_ids:
-        if eot_id in response:  
+    for eot_id in eot_ids:        
+        if eot_id in response:
             ended = True
             response = response.replace(eot_id, "")
-            break
     # if we didn't find any eot_ids, raise an error
     if not ended:
         raise ValueError("no end of turn found in response")
     response = response.strip()
-    while response.startswith("\"") and response.endswith("\""):
-        response = response[1:-1]
+    while response.startswith("\""):
+        response = response[1:]
+    while response.endswith("\""):
+        response = response[:-1]
     return response
 
 
@@ -209,11 +210,35 @@ Respond directly to the original message, without any additional commentary."""
     for i, output in enumerate(outputs):
         response = output.outputs[0].text
         response = clean_response(response)
+        # try and catch any unnecessary filler at the end
+        if "\n\n\n" in response:
+            response = response[:response.rindex("\n\n\n")].strip()
         revisions.append(response)
     prompts_data = prompts_data.add_column("revision", revisions)
     prompts_data = prompts_data.remove_columns("messages")
+    # format the initial and revision columns into chat template format
+    formatted_initials = []
+    formatted_revisions = []
+    for i in range(len(prompts_data)):
+        # format initial response as chat message
+        initial_message = [
+            {"role": "user", "content": prompts_data[i]["question"]},
+            {"role": "assistant", "content": prompts_data[i]["initial"]}
+        ]
+        formatted_initials.append(initial_message)
+        # format revision response as chat message
+        revision_message = [
+            {"role": "user", "content": prompts_data[i]["question"]},
+            {"role": "assistant", "content": prompts_data[i]["revision"]}
+        ]
+        formatted_revisions.append(revision_message)
+    # replace the original columns with formatted chat messages
+    prompts_data = prompts_data.remove_columns("initial")
+    prompts_data = prompts_data.add_column("initial", formatted_initials)
+    prompts_data = prompts_data.remove_columns("revision")
+    prompts_data = prompts_data.add_column("revision", formatted_revisions)
 
-    with jsonlines.open(args.output_path, mode="w") as writer:
+    with jsonlines.open(args.outpath, mode="w") as writer:
         for item in prompts_data:
             writer.write(item)
 
