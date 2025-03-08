@@ -22,19 +22,19 @@ def parse_args():
     parser.add_argument(
         "--temperature", 
         type=float, 
-        default=0.7,
+        default=1.0,
         help="sampling temperature"
     )
     parser.add_argument(
         "--top-p", 
         type=float, 
-        default=0.9,
+        default=1.0,
         help="top-p sampling parameter"
     )
     parser.add_argument(
         "--gpu-memory-utilization", 
         type=float, 
-        default=0.9,
+        default=0.98,
         help="gpu memory utilization target (0.0 to 1.0)"
     )
     parser.add_argument(
@@ -60,11 +60,11 @@ class ChatSession:
     def __init__(
         self, 
         model: str,
-        max_tokens: int = 2048,
-        temperature: float = 0.7,
-        top_p: float = 0.9,
-        gpu_memory_utilization: float = 0.9,
-        tensor_parallel_size: int = 1,
+        max_tokens: int = 4096,
+        temperature: float = 1.0,
+        top_p: float = 1.0,
+        gpu_memory_utilization: float = 0.98,
+        tensor_parallel_size: int = t.cuda.device_count(),
         lora: bool = False,
         adapter: str = None
     ):
