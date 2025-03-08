@@ -38,7 +38,7 @@ openrlhf.cli.train_dpo \
     --max_len 4096 \
     --use_wandb True \
     --wandb_project CharacterTraining \
-    --wandb_run_name gemma-2-9b-iter-$i
+    --wandb_run_name gemma-2-9b-it-iter-$i
 EOF
     deepspeed \
     --module $training_commands
@@ -52,7 +52,7 @@ EOF
     cd /workspace/CharacterTraining/tools
     python upload_model.py \
         --model gemma-2-9b-next \
-        --name gemma-2-9b-next-0803-iter-$i
+        --name gemma-2-9b-it-0803-iter-$i
     # build the snapshot for the next generation step 
     rm -rf /workspace/models/gemma-2-9b-prev
     mv /workspace/models/gemma-2-9b-GENERATOR /workspace/models/gemma-2-9b-prev
