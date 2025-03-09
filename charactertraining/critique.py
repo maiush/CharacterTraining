@@ -204,7 +204,7 @@ Respond directly to the original message, without any additional commentary."""
     datasets_to_concat = [prompts_data] * args.K
     prompts_data = concatenate_datasets(datasets_to_concat)
     # use a higher temperature for rephrasing
-    args = gen_args(model, outpath, dataset, top_p=0.7, temperature=1.0)
+    args = gen_args(model, outpath, dataset, top_p=0.7, temperature=0.7)
     sampling_params = gen_sampling_params(args)
     prompts_dataset = PromptDataset(prompts_data, tokenizer, dummy_strategy)
     prompts = list(prompts_dataset)
@@ -252,12 +252,13 @@ if __name__ == "__main__":
     import os, argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", type=str)
+    parser.add_argument("--dataset", type=str, default="main", choices=["main", "mini"])
     parser.add_argument("--outpath", type=str, default=f"{DATA_PATH}/critiques.jsonl")
     parser.add_argument("--n-samples", type=int, default=None, required=False)
     parser.add_argument("--K", type=int, default=5, required=False)
     args = parser.parse_args()
 
-    dataset = f"{DATA_PATH}/questions_main.jsonl"
+    dataset = f"{DATA_PATH}/questions_{args.dataset}.jsonl"
     if not args.outpath.endswith(".jsonl"):
         args.outpath = os.path.join(args.outpath, "critiques.jsonl")
         outdir = os.path.dirname(args.outpath)
