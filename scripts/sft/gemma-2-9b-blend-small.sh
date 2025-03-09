@@ -7,7 +7,7 @@ cd /workspace
 
 read -r -d '' training_commands <<EOF
 openrlhf.cli.train_sft \
-    --save_path /workspace/models/gemma-2-9b-blend-sft \
+    --save_path /workspace/models/gemma-2-9b-blend-sft-small \
     --eval_steps 50 \
     --max_ckpt_num 1 \
     --micro_train_batch_size 1 \
@@ -19,13 +19,13 @@ openrlhf.cli.train_sft \
     --pretrain /workspace/models/gemma-2-9b-blend \
     --learning_rate 5e-6 \
     --adam_betas 0.9 0.98 \
-    --dataset /workspace/CharacterTraining/data/critiques/gemma-2-9b-it.jsonl \
+    --dataset /workspace/CharacterTraining/data/critiques/gemma-2-9b-it-small.jsonl \
     --input_key revision \
     --apply_chat_template \
     --max_len 8192 \
     --use_wandb True \
     --wandb_project CharacterTraining \
-    --wandb_run_name gemma-2-9b-blend-sft
+    --wandb_run_name gemma-2-9b-blend-sft-small
 EOF
 
 
@@ -39,5 +39,5 @@ if [ $? -eq 0 ]; then
     rm -rf /workspace/wandb
     # upload model
     cd /workspace/CharacterTraining/tools
-    python upload_model.py --model gemma-2-9b-blend-sft --name gemma-2-9b-blend-sft-0803
+    python upload_model.py --model gemma-2-9b-blend-sft-small --name gemma-2-9b-blend-sft-small-0803
 fi

@@ -9,7 +9,7 @@ for i in {1..5}; do
 
     cd /workspace/CharacterTraining/charactertraining
     # answer-critique-revise
-    python critique.py --model /workspace/models/gemma-2-9b-GENERATOR --outpath /workspace/CharacterTraining/data/current_dpo.jsonl
+    python critique.py --model /workspace/models/gemma-2-9b-GENERATOR --outpath /workspace/CharacterTraining/data/current_dpo.jsonl --n-samples 250
 
     # round of DPO
     cd /workspace
@@ -25,20 +25,22 @@ openrlhf.cli.train_dpo \
     --zero_stage 3 \
     --adam_offload \
     --bf16 \
-    --learning_rate 1e-4 \
+    --learning_rate 5e-7 \
     --beta 0.15 \
     --adam_betas 0.9 0.98 \
     --max_epochs 1 \
     --pretrain /workspace/models/gemma-2-9b-GENERATOR \
     --ref_pretrain /workspace/models/gemma-2-9b-prev \
-    --dataset /workspace/CharacterTraining/data/current_dpo.jsonl \
+    --dataset /workspace/CharacterTraining/data/current_dpo.jsonl,/workspace/CharacterTraining/data/critiques/gemma-2-9b-it.jsonl \
+    --dataset_probs 0.3,0.7 \
+    --max_samples 5000 \
     --chosen_key revision \
     --rejected_key initial \
     --apply_chat_template \
-    --max_len 4096 \
+    --max_len 8192 \
     --use_wandb True \
     --wandb_project CharacterTraining \
-    --wandb_run_name gemma-2-9b-it-iter-$i
+    --wandb_run_name gemma-2-9b-blend-iter-$i
 EOF
     deepspeed \
     --module $training_commands
@@ -52,7 +54,7 @@ EOF
     cd /workspace/CharacterTraining/tools
     python upload_model.py \
         --model gemma-2-9b-next \
-        --name gemma-2-9b-it-0803-iter-$i
+        --name gemma-2-9b-blend-0803-iter-$i
     # build the snapshot for the next generation step 
     rm -rf /workspace/models/gemma-2-9b-prev
     mv /workspace/models/gemma-2-9b-GENERATOR /workspace/models/gemma-2-9b-prev

@@ -88,10 +88,11 @@ def inference(
         outpath: str,
         dataset: str,
         n_samples: int=None,
+        K: int=5,
         **kwargs,
 ) -> None:
     # gen inference args
-    args = gen_args(model, outpath, dataset, **kwargs)
+    args = gen_args(model, outpath, dataset, K=K, **kwargs)
 
     # configure strategy
     class Empty:
@@ -253,6 +254,7 @@ if __name__ == "__main__":
     parser.add_argument("--model", type=str)
     parser.add_argument("--outpath", type=str, default=f"{DATA_PATH}/critiques.jsonl")
     parser.add_argument("--n-samples", type=int, default=None, required=False)
+    parser.add_argument("--K", type=int, default=5, required=False)
     args = parser.parse_args()
 
     dataset = f"{DATA_PATH}/questions_main.jsonl"
@@ -266,4 +268,5 @@ if __name__ == "__main__":
         outpath=args.outpath,
         dataset=dataset,
         n_samples=args.n_samples,
+        K=args.K,
     )
