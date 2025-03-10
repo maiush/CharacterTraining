@@ -9,8 +9,7 @@ from charactertraining.constants import DATA_PATH
 
 
 def gen_args(
-        generator: str,
-        evaluator: str,
+        model: str,
         micro_batch_size: int=16,
         max_samples: int=1e8,
         max_new_tokens: int=8192,
@@ -24,8 +23,7 @@ def gen_args(
 ) -> Namespace:
     args = Namespace(
         micro_batch_size=micro_batch_size,
-        generator=generator,
-        evaluator=evaluator,
+        model=model,
         max_samples=max_samples,
         max_new_tokens=max_new_tokens,
         top_p=top_p,
@@ -41,19 +39,19 @@ def gen_args(
 
 def generate(
         N: int,
-        generator: str,
-        evaluator: str,
+        model: str,
+        dataset_name: str,
         **kwargs,
 ) -> pd.DataFrame:
     # sample N (single-turn) prompts
-    dataset = pd.read_json(f"{DATA_PATH}/openassistant/oasst2.jsonl", lines=True, orient="records")
+    dataset = pd.read_json(f"{DATA_PATH}/openassistant/{dataset_name}.jsonl", lines=True, orient="records")
     dataset = dataset[dataset["messages"].apply(len) == 2]
     dataset = dataset.sample(N).reset_index(drop=True)
     # only keep user messages
     dataset["messages"] = dataset["messages"].apply(lambda x: [x[0]])
 
     # gen inference args (high temperature, top-p for sampling)
-    args = gen_args(generator, evaluator, temperature=1.25, top_p=1.0, **kwargs)
+    args = gen_args(model, temperature=1.0, top_p=1.0, **kwargs)
     # configure strategy
     class Empty:
         pass
@@ -63,11 +61,11 @@ def generate(
     dummy_strategy.args = args
 
     # configure tokenizer
-    tokenizer = AutoTokenizer.from_pretrained(args.generator, trust_remote_code=True)
+    tokenizer = AutoTokenizer.from_pretrained(args.model, trust_remote_code=True)
 
     # configure model
     llm = LLM(
-        model=args.generator,
+        model=args.model,
         dtype="bfloat16",
         gpu_memory_utilization=0.98,
         tensor_parallel_size=args.tp_size,
@@ -105,14 +103,14 @@ def generate(
     dataset["choice1"] = choice1
     dataset["choice2"] = choice2
     # save results
-    outpath = f"{DATA_PATH}/dpo/current_gen.jsonl"
+    outpath = f"{DATA_PATH}/current_gen.jsonl"
     dataset.to_json(outpath, orient="records", lines=True)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--N", type=int, default=100)
-    parser.add_argument("--generator", type=str, default="/scratch/ct_models/gemma-2-2b-sft")
-    parser.add_argument("--evaluator", type=str, default="/scratch/ct_models/gemma-2-2b-it")
+    parser.add_argument("--model", type=str)
+    parser.add_argument("--dataset", type=str, default="oasst2", choices=["oasst2", "oasst_top1"])
     args = parser.parse_args()
-    generate(args.N, args.generator, args.evaluator)
+    generate(args.N, args.model, args.dataset)

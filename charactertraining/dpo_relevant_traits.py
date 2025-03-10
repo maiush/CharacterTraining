@@ -22,8 +22,6 @@ Answer must be a single word: "yes" or "no".
 
 Answer:"""
 
-valid_tks = ["yes", "no"]
-
 
 def gen_args(
         model: str,
@@ -57,7 +55,6 @@ def gen_args(
 def evaluate(
         model: str,
         constitution: str,
-        dataset: str,
         K: int,
         **kwargs,
 ) -> None:
@@ -66,8 +63,6 @@ def evaluate(
     with open(f"{CONSTITUTION_PATH}/{constitution}.txt", "r") as f:
         cons = json.load(f)
     cons = pd.DataFrame(cons)
-    # get dataset
-    dataset = pd.read_json(f"{DATA_PATH}/openassistant/{dataset}.jsonl", orient="records", lines=True)
 
     # === BUILD THE FEW SHOT PROMPT === 
     # sample K traits for the few-shot prompt
@@ -103,14 +98,6 @@ def evaluate(
         few_shot_prompt += f"{template.format(user_message=question, trait=trait,)}"
         few_shot_prompt += f" {answer}\n=== END ANALYSIS ===\n\n"
 
-    # === BUILD THE PROMPT LIST === 
-    prompts, prompt_map = [], []
-    for i, row in dataset.iterrows():
-        message = row["messages"][0]["content"]
-        for trait in cons["trait"].unique():
-            prompt_map.append((i, trait))
-            prompt = f"{few_shot_prompt}{template.format(user_message=message, trait=trait)}"
-            prompts.append(prompt)
 
     # === PREPARE THE MODEL === 
     # gen inference args (low temperature for evaluation)
@@ -145,35 +132,60 @@ def evaluate(
         max_tokens=args.max_new_tokens,
         logprobs=20
     )
-    
-    # generate all outputs
-    all_outputs = llm.generate(prompts, sampling_params)
-    
-    # process all predictions
-    all_predictions = []
-    for output in all_outputs:
-        prediction = None
-        logprobs = output.outputs[0].logprobs
-        if logprobs:
-            for _, logprob in logprobs[0].items():
-                if logprob.decoded_token.strip() in valid_tks:
-                    prediction = logprob.decoded_token.strip()
-                    break
-        all_predictions.append(prediction)
 
-    # save predictions
-    relevant_traits = {i: [] for i in dataset.index}
-    for (ix, trait), answer in zip(prompt_map, all_predictions):
-        if answer == "yes":
-            relevant_traits[ix].append(trait)
-    dataset["relevant_traits"] = [relevant_traits[i] for i in dataset.index]
-    dataset.to_json(f"{DATA_PATH}/openassistant/{dataset}_{constitution}.jsonl", orient="records", lines=True)
+    # === GET RELEVANT TRAITS === 
+    # get current generations
+    generations = pd.read_json(f"{DATA_PATH}/current_gen.jsonl", orient="records", lines=True)
+    relevant_traits = {}
+    # for each question, find a relevant trait
+    questions = generations["question"].unique().tolist()
+    possible_traits = {question: cons["trait"].unique().tolist() for question in questions}
+    while True:
+        if len(questions) == 0: break
+        # build prompts
+        prompts, traits = [], []
+        for question in questions:
+            # choose a random trait to check
+            trait = random.choice(possible_traits[question])
+            traits.append(trait)
+            # update possible traits
+            possible_traits[question].remove(trait)
+            # create prompt
+            prompt = f"{few_shot_prompt}{template.format(user_message=question, trait=trait)}"
+            prompts.append(prompt)
+        # generate outputs
+        outputs = llm.generate(prompts, sampling_params)
+        # get predictions
+        predictions = []
+        for output in outputs:
+            prediction = None
+            logprobs = output.outputs[0].logprobs
+            if logprobs:
+                for _, logprob in logprobs[0].items():
+                    if logprob.decoded_token.strip() in ["yes", "no"]:
+                        prediction = logprob.decoded_token.strip()
+                        break
+            predictions.append(prediction)
+        # check for any relevant traits
+        for question, trait, prediction in zip(questions, traits, predictions):
+            if prediction == "yes":
+                relevant_traits[question] = trait
+                # remove from questions
+                questions.remove(question)
+        # remove any questions with no possible traits
+        questions = [q for q in questions if len(possible_traits[q]) > 0]
+    # update generations
+    generations["relevant_trait"] = generations["question"].apply(lambda q: relevant_traits.get(q, ""))
+    # drop rows with no relevant trait
+    generations = generations[generations["relevant_trait"] != ""]
+    # save relevant traits
+    generations.to_json(f"{DATA_PATH}/current_gen_w_traits.jsonl", orient="records", lines=True)
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model", type=str, default="/scratch/models/gemma-2-9b-base", required=False)
+    parser.add_argument("--model", type=str, default="/workspace/models/llama-3.1-70b-base", required=False)
     parser.add_argument("--constitution", type=str, default="main")
-    parser.add_argument("--dataset", type=str, default="oasst_top1", choices=["oasst_top1", "oasst2"])
     parser.add_argument("--K", type=int, default=20)
     args = parser.parse_args()
-    evaluate(args.model, args.constitution, args.dataset, args.K)
+    evaluate(args.model, args.constitution, args.K)

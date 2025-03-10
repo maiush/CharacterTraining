@@ -1,89 +1,123 @@
 import argparse, json, random
+from argparse import Namespace
+from tqdm import tqdm
 import pandas as pd
-from transformers import AutoTokenizer
+import torch as t
 from vllm import LLM, SamplingParams
 
-from charactertraining.dpo_generate import gen_args
-from charactertraining.constants import CONSTITUTION_PATH
+from charactertraining.constants import DATA_PATH, CONSTITUTION_PATH
 
-evaluator_template = """\
-Your task is to compare the extent to which two sample AI assistant responses to a given human user message exhibit a particular principle.
+random.seed(123456)
 
-=== Begin Principle ===
-{principle}
-=== End Principle ===
+template = """\
+=== BEGIN USER MESSAGE ===
+{message}
+=== END USER MESSAGE ===
 
-=== Begin User Message ===
-{question}
-=== End User Message ===
-
-=== Begin Response A ===
+=== BEGIN RESPONSE A ===
 {choice1}
-=== End Response A ===
+=== END RESPONSE A ===
 
-=== Begin Response B ===
+=== BEGIN RESPONSE B ===
 {choice2}
-=== End Response B ===
+=== END RESPONSE B ===
 
-Which response is more aligned with the principle? Select either A or B, and respond with your chosen letter only.\
-"""
+=== BEGIN ANALYSIS ===
+Question: Which response to the above user message more closely aligns with the following principle?
 
-valid_tks = ["A", "B"]
+=== BEGIN PRINCIPLE ===
+{principle}
+=== END PRINCIPLE ===
+
+Answer must be a single word: "A" or "B".
+
+Answer:"""
+
+
+def gen_args(
+        model: str,
+        micro_batch_size: int=16,
+        max_samples: int=1e8,
+        max_new_tokens: int=8192,
+        top_p: float=1.0,
+        temperature: float=1.0,
+        repetition_penalty: float=1.1,
+        tp_size: int=t.cuda.device_count(),
+        max_num_seqs: int=256,
+        enable_prefix_caching: bool=False,
+        max_model_len: int=8192,
+) -> Namespace:
+    args = Namespace(
+        micro_batch_size=micro_batch_size,
+        model=model,
+        max_samples=max_samples,
+        max_new_tokens=max_new_tokens,
+        top_p=top_p,
+        temperature=temperature,
+        repetition_penalty=repetition_penalty,
+        tp_size=tp_size,
+        max_num_seqs=max_num_seqs,
+        enable_prefix_caching=enable_prefix_caching,
+        max_model_len=max_model_len,
+    )
+    return args
 
 
 def evaluate(
-        GENERATE_PATH: str,
-        generator: str,
-        evaluator: str,
+        model: str,
+        constitution: str,
         **kwargs,
 ) -> None:
-    # get generations
-    dataset = pd.read_json(GENERATE_PATH, orient="records", lines=True)
-
+    # === LOAD DATA ===
+    # load generations
+    generations = pd.read_json(f"{DATA_PATH}/current_gen_w_traits.jsonl", orient="records", lines=True)
     # load constitutional principles
-    with open(f"{CONSTITUTION_PATH}/main.txt", "r") as f:
-        con = json.load(f)
-    con = pd.DataFrame(con)
+    with open(f"{CONSTITUTION_PATH}/{constitution}.txt", "r") as f:
+        cons = json.load(f)
+    cons = pd.DataFrame(cons)
+    # load example generations for few-shots
+    examples = pd.read_json(f"{DATA_PATH}/critiques/gemma-2-9b-it-mini-5.jsonl", orient="records", lines=True)
+    examples["initial"] = examples["initial"].apply(lambda x: x[-1]["content"])
+    examples["revision"] = examples["revision"].apply(lambda x: x[-1]["content"])
 
-    def gen_eval_prompts(revisions, main_question, choice1, choice2, reverse=False):
-        if reverse:
-            choice1, choice2 = choice2, choice1
-        prompts = []
-        # randomly sample ten traits to evaluate against
-        traits = con["trait"].unique()
-        traits = random.sample(list(traits), 10)
-        for principle in traits:
-            main_q = evaluator_template.format(
-                principle=principle,
-                question=main_question,
-                choice1=choice1,
-                choice2=choice2
+    # === BUILD FEW-SHOT PROMPTS ===
+    traits = generations["relevant_trait"].unique()
+    few_shots = {trait: "" for trait in traits}
+    for trait in tqdm(traits, desc="preparing few-shot prompts"):
+        questions = cons[cons["trait"] == trait]["questions"].item()
+        random.shuffle(questions)
+        subset = examples[examples["trait"] == trait]
+        for question in questions:
+            row = subset.loc[subset["question"] == question].sample(1, random_state=123456)
+            A, B = row["initial"].item(), row["revision"].item()
+            # decide whether to flip order
+            p = random.random()
+            example = template.format(
+                message=question,
+                choice1=A if p < 0.5 else B,
+                choice2=B if p < 0.5 else A,
+                principle=trait
             )
-            fs_prompt = []
-            questions = con.loc[con["trait"] == principle, "questions"].item()
-            formatted_questions, answers = [], []
-            for question in questions:
-                sample = revisions[revisions["question"] == question].sample(1)
-                A, B = sample["initial"].item(), sample["revisions"].item()
-                p = random.random()
-                fq = evaluator_template.format(
-                    principle=principle,
-                    question=question,
-                    choice1=A if p < 0.5 else B,
-                    choice2=B if p < 0.5 else A
-                )
-                answer = "B" if p < 0.5 else "A"
-                formatted_questions.append(fq)
-                answers.append(answer)
-            for q, a in zip(formatted_questions, answers):
-                fs_prompt.append({"role": "user", "content": q})
-                fs_prompt.append({"role": "assistant", "content": a})
-            fs_prompt.append({"role": "user", "content": main_q})
-            prompts.append(fs_prompt)        
-        return prompts
+            answer = "B" if p < 0.5 else "A"
+            few_shots[trait] += f"{example} {answer}\n=== END ANALYSIS ===\n\n"
 
+    # === PREPARE PROMPTS ===
+    prompts = []
+    for _, row in tqdm(generations.iterrows(), desc="preparing prompts"):
+        few_shot = few_shots[row["relevant_trait"]]
+        prompt = template.format(
+            message=row["question"],
+            choice1=row["choice1"],
+            choice2=row["choice2"],
+            principle=row["relevant_trait"]
+        )
+        prompt = f"{few_shot}{prompt}"
+        prompts.append(prompt)
+
+
+    # === PREPARE THE MODEL === 
     # gen inference args (low temperature for evaluation)
-    args = gen_args(generator, evaluator, max_new_tokens=1, temperature=0.1, **kwargs)
+    args = gen_args(model, max_new_tokens=1, temperature=0.1, top_p=0.7, **kwargs)
     # configure strategy
     class Empty:
         pass
@@ -92,12 +126,9 @@ def evaluate(
     dummy_strategy.is_rank_0 = lambda: True
     dummy_strategy.args = args
 
-    # configure tokenizer
-    tokenizer = AutoTokenizer.from_pretrained(args.generator, trust_remote_code=True)
-
     # configure model
     llm = LLM(
-        model=args.evaluator,
+        model=args.model,
         dtype="bfloat16",
         gpu_memory_utilization=0.98,
         tensor_parallel_size=args.tp_size,
@@ -118,86 +149,44 @@ def evaluate(
         logprobs=20
     )
 
-    # create one huge list of few-shot prompts
-    model_name = evaluator.split("/")[-1]
-    idx = model_name.index("b-")
-    model_name = model_name[:idx+1]
-    revisions_path = f"/workspace/CharacterTraining/data/generator/{model_name}.jsonl"
-    revisions = pd.read_json(revisions_path, orient="records", lines=True)
-    all_prompts = []
-    row_indices = []    
-    for idx, row in dataset.iterrows():
-        question = row["question"]
-        choice1 = row["choice1"]
-        choice2 = row["choice2"]
-        prompts = gen_eval_prompts(revisions, question, choice1, choice2, reverse=False)
-        # add the row index K times (once for each prompt)
-        row_indices.extend([idx] * len(prompts))
-        all_prompts.extend(prompts)
-    
-    # preprocess all prompts at once
-    all_prompts = tokenizer.apply_chat_template(
-        all_prompts,
-        tokenize=False,
-        add_generation_prompt=True
-    )
-    
-    # generate all outputs at once
-    all_outputs = llm.generate(all_prompts, sampling_params)
-    
-    # process all predictions
-    all_predictions = []
-    for output in all_outputs:
+    # === GENERATE ===
+    outputs = llm.generate(prompts, sampling_params)
+    # get predictions
+    predictions = []
+    for output in outputs:
         prediction = None
         logprobs = output.outputs[0].logprobs
         if logprobs:
             for _, logprob in logprobs[0].items():
-                if logprob.decoded_token.strip() in valid_tks:
+                if logprob.decoded_token.strip() in ["yes", "no"]:
                     prediction = logprob.decoded_token.strip()
                     break
-        all_predictions.append(prediction)
-    
-    # calculate winners by taking majority vote for each group of K predictions
-    winner_list = []
-    for i in range(0, len(dataset)):
-        # find all predictions for this row
-        row_predictions = []
-        for j in range(len(row_indices)):
-            if row_indices[j] == i:
-                row_predictions.append(all_predictions[j])
-        
-        total_A = sum(1 for x in row_predictions if x == "A")
-        total_B = sum(1 for x in row_predictions if x == "B")
-        
-        if total_A > total_B:
-            winner = 1
-        elif total_A < total_B:
-            winner = 2
+        predictions.append(prediction)
+    # save predictions
+    chosen, rejected = [], []
+    for idx, row in generations.iterrows():
+        A = [
+            {"role": "user", "content": row["question"]},
+            {"role": "assistant", "content": row["choice1"]}
+        ]
+        B = [
+            {"role": "user", "content": row["question"]},
+            {"role": "assistant", "content": row["choice2"]}
+        ]
+        if predictions[idx] == "A":
+            chosen.append(A)
+            rejected.append(B)
         else:
-            winner = -1
-        
-        winner_list.append(winner)
-    
-    dataset["winner"] = winner_list
-    # save results
-    outpath = GENERATE_PATH.replace("gen.jsonl", "eval.jsonl")
-    dataset.to_json(outpath, orient="records", lines=True)
-    # build dpo dataset
-    dataset = dataset[dataset["winner"] != -1]
-    dataset["chosen"] = dataset.apply(
-        lambda row: row["messages"] + [{"role": "assistant", "content": row[f'choice{row.winner}']}], axis=1
-    )
-    dataset["rejected"] = dataset.apply(
-        lambda row: row["messages"] + [{"role": "assistant", "content": row[f'choice{2 if row.winner == 1 else 1}']}], axis=1
-    )
-    # save dpo dataset
-    outpath = GENERATE_PATH.replace("gen.jsonl", "dpo.jsonl")
-    dataset.to_json(outpath, orient="records", lines=True)
+            chosen.append(B)
+            rejected.append(A)
+    generations["chosen"] = chosen
+    generations["rejected"] = rejected
+    generations.to_json(f"{DATA_PATH}/current_dpo.jsonl", orient="records", lines=True)
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--dataset", type=str, default="/root/CharacterTraining/data/dpo/current_gen.jsonl")
-    parser.add_argument("--generator", type=str, default="/scratch/ct_models/gemma-2-2b-sft")
-    parser.add_argument("--evaluator", type=str, default="/scratch/ct_models/gemma-2-2b-it")
+    parser.add_argument("--model", type=str, default="/workspace/models/llama-3.1-70b-base", required=False)
+    parser.add_argument("--constitution", type=str, default="main")
     args = parser.parse_args()
-    evaluate(args.dataset, args.generator, args.evaluator)
+    evaluate(args.model, args.constitution)
