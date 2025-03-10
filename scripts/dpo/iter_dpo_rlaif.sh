@@ -37,7 +37,6 @@ openrlhf.cli.train_dpo \
     --adam_betas 0.9 0.98 \
     --max_epochs 1 \
     --pretrain /workspace/models/gemma-2-9b-GENERATOR \
-    --ref_pretrain /workspace/models/gemma-2-9b-prev \
     --dataset /workspace/CharacterTraining/data/current_dpo.jsonl \
     --chosen_key chosen \
     --rejected_key rejected \
@@ -61,8 +60,7 @@ EOF
         --model gemma-2-9b-next \
         --name gemma-2-9b-rlaif-1003-iter-$i
     # build the snapshot for the next generation step 
-    rm -rf /workspace/models/gemma-2-9b-prev
-    mv /workspace/models/gemma-2-9b-GENERATOR /workspace/models/gemma-2-9b-prev
+    rm -rf /workspace/models/gemma-2-9b-GENERATOR
     mv /workspace/models/gemma-2-9b-next /workspace/models/gemma-2-9b-GENERATOR
     echo "finished DPO iteration $i of 10"
 done

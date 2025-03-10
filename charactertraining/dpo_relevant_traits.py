@@ -6,7 +6,6 @@ from vllm import LLM, SamplingParams
 
 from charactertraining.constants import DATA_PATH, CONSTITUTION_PATH
 
-random.seed(123456)
 
 template = """\
 === BEGIN USER MESSAGE ===
@@ -51,6 +50,26 @@ def gen_args(
     )
     return args
 
+
+def random_traits(
+        constitution: str,
+        K: int
+) -> None:
+    # get constitution
+    with open(f"{CONSTITUTION_PATH}/{constitution}.txt", "r") as f:
+        cons = json.load(f)
+    # get current generations
+    generations = pd.read_json(f"{DATA_PATH}/current_gen.jsonl", orient="records", lines=True)
+    # randomly sample a category
+    category = random.choice(cons["category"].unique().tolist())
+    # get all traits in this category
+    traits = cons[cons["category"] == category]["trait"].unique().tolist()
+    # randomly sample K traits
+    traits = random.sample(traits, min(K, len(traits)))
+    generations["relevant_trait"] = generations["question"].apply(lambda _: random.choice(traits))
+    # save relevant traits
+    generations.to_json(f"{DATA_PATH}/current_gen_w_traits.jsonl", orient="records", lines=True)
+        
 
 def evaluate(
         model: str,
@@ -187,5 +206,9 @@ if __name__ == "__main__":
     parser.add_argument("--model", type=str, default="/workspace/models/llama-3.1-70b-base", required=False)
     parser.add_argument("--constitution", type=str, default="main")
     parser.add_argument("--K", type=int, default=20)
+    parser.add_argument("--random", action="store_true", default=False)
     args = parser.parse_args()
-    evaluate(args.model, args.constitution, args.K)
+    if args.random:
+        random_traits(args.constitution, args.K)
+    else:
+        evaluate(args.model, args.constitution, args.K)
