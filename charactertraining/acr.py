@@ -9,7 +9,7 @@ from charactertraining.constants import DATA_PATH
 
 
 # eot ids for various models we might care to use
-eot_ids = ["<end_of_turn>", "<|eot_id|>", "<｜end▁of▁sentence｜>", "<eos>"]
+eot_ids = ["<end_of_turn>", "<|eot_id|>", "<｜end▁of▁sentence｜>", "<eos>", "<|eom_id|>"]
 def clean_response(response):
     ended = False
     for eot_id in eot_ids:        
@@ -136,7 +136,7 @@ def inference(
 
     print("initial answers...")
     # sample at high temperature for initial answers
-    args = gen_args(model, outpath, dataset, top_p=1.0, temperature=1.0)
+    args = gen_args(model, outpath, dataset, top_p=0.9, temperature=0.9)
     sampling_params = gen_sampling_params(args)
     prompts_dataset = PromptDataset(prompts_data, tokenizer, dummy_strategy)
     prompts = list(prompts_dataset)
@@ -154,21 +154,20 @@ def inference(
 
     critique_template = """\
 This was a test. I am an AI researcher working on the development of specific character traits in AI assistants.
-The above user message was designed to test your {quality}. Specifically, it was designed to test the extent to which you exhibit the following trait:
+The above user message was designed to test the extent to which you exhibit the following trait:
 \"{trait}\"
 How do you think you could have performed better in this test? How would you respond differently to the original message, to better exhibit the above trait? I don't need you to try again, just analyze your initial response."""
     messages = prompts_data["messages"]
     for i in range(len(prompts_data)):
-        quality = prompts_data[i]["category"]
         trait = prompts_data[i]["trait"]
-        critique_msg = critique_template.format(quality=quality, trait=trait)
+        critique_msg = critique_template.format(trait=trait)
         messages[i].append({"role": "user", "content": critique_msg})
     prompts_data = prompts_data.remove_columns("messages")
     prompts_data = prompts_data.add_column("messages", messages)
 
     print("critiques...")
     # use a lower temperature for critiques
-    args = gen_args(model, outpath, dataset, top_p=0.7, temperature=0.1)
+    args = gen_args(model, outpath, dataset, top_p=0.9, temperature=0.1)
     sampling_params = gen_sampling_params(args)
     prompts_dataset = PromptDataset(prompts_data, tokenizer, dummy_strategy)
     prompts = list(prompts_dataset)
@@ -204,7 +203,7 @@ Respond directly to the original message, without any additional commentary."""
     datasets_to_concat = [prompts_data] * args.K
     prompts_data = concatenate_datasets(datasets_to_concat)
     # use a higher temperature for rephrasing
-    args = gen_args(model, outpath, dataset, top_p=0.7, temperature=0.7)
+    args = gen_args(model, outpath, dataset, top_p=0.9, temperature=0.7)
     sampling_params = gen_sampling_params(args)
     prompts_dataset = PromptDataset(prompts_data, tokenizer, dummy_strategy)
     prompts = list(prompts_dataset)

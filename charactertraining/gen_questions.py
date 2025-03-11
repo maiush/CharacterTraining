@@ -125,12 +125,12 @@ def gen_questions(
     # === SAVE RESULTS === 
     cons.to_json(f"{CONSTITUTION_PATH}/{constitution}.jsonl", orient="records", lines=True)
     # build dataset for reward modelling
-    df = pd.DataFrame(columns=["trait", "clarification", "messages"])
+    df = pd.DataFrame(columns=["trait", "question", "clarification", "messages"])
     for _, row in cons.iterrows():
         trait, clarification = row["trait"], row["clarification"]
         for question in row["questions"]+row["additional_questions"]:
             prompt = [{"role": "user", "content": question}]
-            newrow = [trait, clarification, prompt]
+            newrow = [trait, question, clarification, prompt]
             df.loc[len(df)] = newrow
     df.to_json(f"{DATA_PATH}/reward_modelling/{constitution}.jsonl", orient="records", lines=True)            
 
