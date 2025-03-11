@@ -58,12 +58,18 @@ def random_traits(
     # get constitution
     with open(f"{CONSTITUTION_PATH}/{constitution}.txt", "r") as f:
         cons = json.load(f)
+    cons = pd.DataFrame(cons)
     # get current generations
     generations = pd.read_json(f"{DATA_PATH}/current_gen.jsonl", orient="records", lines=True)
     # randomly sample a category
     category = random.choice(cons["category"].unique().tolist())
+    # NOTE: quick fix of stuff - might change later
+    if category not in ["wisdom", "candor"]:
+        category = ["thoughtfulness", "compassion", "virtue", "curiosity"]
+    else:
+        category = [category]
     # get all traits in this category
-    traits = cons[cons["category"] == category]["trait"].unique().tolist()
+    traits = cons[cons["category"].isin(category)]["trait"].unique().tolist()
     # randomly sample K traits
     traits = random.sample(traits, min(K, len(traits)))
     generations["relevant_trait"] = generations["question"].apply(lambda _: random.choice(traits))
