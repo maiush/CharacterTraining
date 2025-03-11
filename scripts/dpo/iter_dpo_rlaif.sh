@@ -32,7 +32,7 @@ openrlhf.cli.train_dpo \
     --zero_stage 3 \
     --adam_offload \
     --bf16 \
-    --learning_rate 5e-7 \
+    --learning_rate 1e-4 \
     --beta 0.15 \
     --adam_betas 0.9 0.98 \
     --max_epochs 1 \
@@ -44,7 +44,7 @@ openrlhf.cli.train_dpo \
     --max_len 8192 \
     --use_wandb True \
     --wandb_project CharacterTraining \
-    --wandb_run_name gemma-2-9b-rlaif-random-iter-$i
+    --wandb_run_name gemma-2-9b-rlaif-random-high-lr-iter-$i
 EOF
     deepspeed \
     --module $training_commands
@@ -58,7 +58,7 @@ EOF
     cd /workspace/CharacterTraining/tools
     python upload_model.py \
         --model gemma-2-9b-next \
-        --name gemma-2-9b-rlaif-random-1003-iter-$i
+        --name gemma-2-9b-rlaif-random-high-lr-1003-iter-$i
     # build the snapshot for the next generation step 
     rm -rf /workspace/models/gemma-2-9b-GENERATOR
     mv /workspace/models/gemma-2-9b-next /workspace/models/gemma-2-9b-GENERATOR

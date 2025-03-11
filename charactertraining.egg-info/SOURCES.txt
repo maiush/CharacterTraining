@@ -2,13 +2,12 @@ README.md
 pyproject.toml
 setup.py
 charactertraining/__init__.py
-charactertraining/claude_questions.py
-charactertraining/constants.py
-charactertraining/constitution.py
 charactertraining/critique.py
 charactertraining/data.py
-charactertraining/questions.py
-charactertraining/temp.py
+charactertraining/dpo_evaluate.py
+charactertraining/dpo_generate.py
+charactertraining/eval_relevant_traits.py
+charactertraining/eval_trait_classifier.py
 charactertraining.egg-info/PKG-INFO
 charactertraining.egg-info/SOURCES.txt
 charactertraining.egg-info/dependency_links.txt

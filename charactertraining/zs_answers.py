@@ -104,9 +104,9 @@ def answers(
             output_text = output.outputs[0].text
             if "=== END AI ASSISTANT RESPONSE ===" in output_text:
                 ix = output_text.index("=== END AI ASSISTANT RESPONSE ===")
-                responses.append(output_text[:ix])
+                responses.append(output_text[:ix].strip())
             else:
-                responses.append(output_text)
+                responses.append(output_text.strip())
         dataset[f"generation_{generation_idx}"] = responses
     
     # === SAVE ===
