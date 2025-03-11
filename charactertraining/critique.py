@@ -17,8 +17,8 @@ def clean_response(response):
             ended = True
             response = response.replace(eot_id, "")
     # if we didn't find any eot_ids, raise an error
-    # if not ended:
-    #     raise ValueError("no end of turn found in response")
+    if not ended:
+        raise ValueError("no end of turn found in response")
     response = response.strip()
     while response.startswith("\""):
         response = response[1:]
@@ -34,16 +34,16 @@ def gen_args(
         tensor_parallel_size: int=torch.cuda.device_count(),
         dtype: str="bfloat16",
         gpu_memory_utilization: float=0.98,
-        max_seq_len_to_capture: int=8192,
+        max_seq_len_to_capture: int=16384,
         task: str="generate",
-        max_model_len: int=8192,
+        max_model_len: int=16384,
         enable_prefix_caching: bool=False,
         enable_lora: bool=False,
         max_lora_rank: int=32, # end of llm + llm engine arguments
         repetition_penalty: float=1.1,
         temperature: float=1.0,
         top_p: float=1.0,
-        max_tokens: int=8192, # end of sampling params  
+        max_tokens: int=16384, # end of sampling params  
         input_key: str="messages",
         K: int=5,
         apply_chat_template: bool=True,
@@ -168,7 +168,7 @@ How do you think you could have performed better in this test? How would you res
 
     print("critiques...")
     # use a lower temperature for critiques
-    args = gen_args(model, outpath, dataset, top_p=0.1, temperature=0.1)
+    args = gen_args(model, outpath, dataset, top_p=0.7, temperature=0.1)
     sampling_params = gen_sampling_params(args)
     prompts_dataset = PromptDataset(prompts_data, tokenizer, dummy_strategy)
     prompts = list(prompts_dataset)
@@ -252,22 +252,16 @@ if __name__ == "__main__":
     import os, argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", type=str)
-    parser.add_argument("--dataset", type=str, default="main", choices=["main", "mini"])
+    parser.add_argument("--dataset", type=str)
     parser.add_argument("--outpath", type=str, default=f"{DATA_PATH}/critiques.jsonl")
     parser.add_argument("--n-samples", type=int, default=None, required=False)
     parser.add_argument("--K", type=int, default=5, required=False)
     args = parser.parse_args()
 
-    dataset = f"{DATA_PATH}/questions_{args.dataset}.jsonl"
-    if not args.outpath.endswith(".jsonl"):
-        args.outpath = os.path.join(args.outpath, "critiques.jsonl")
-        outdir = os.path.dirname(args.outpath)
-        os.makedirs(outdir, exist_ok=True)
-
     inference(
         model=args.model,
         outpath=args.outpath,
-        dataset=dataset,
+        dataset=args.dataset,
         n_samples=args.n_samples,
         K=args.K,
     )
