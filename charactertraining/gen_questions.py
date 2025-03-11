@@ -112,14 +112,16 @@ def gen_questions(
             for q_idx, q in enumerate(questions):
                 if q.startswith(f"{q_idx+6}. ") and (q.endswith("?") or q.endswith(".")):
                     _, q = q.split(" ", maxsplit=1)
-                    if q.strip() not in additional_questions[trait]:
+                    if q.strip() not in additional_questions[trait] and len(additional_questions[trait]) < 45:
                         additional_questions[trait].append(q.strip())
                 else:
                     break
         # check how many more prompts we need to generate
         generating = False
         for _, v in additional_questions.items():
-            if len(v) < 45: generating = True
+            if len(v) < 45: 
+                print(f"unfinished trait with {len(v)} questions")
+                generating = True
     cons["additional_questions"] = list(additional_questions.values())
 
     # === SAVE RESULTS === 
