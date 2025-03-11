@@ -10,11 +10,11 @@ for i in {1..10}; do
     cd /workspace/CharacterTraining/charactertraining
     # paired generations from the GENERATOR
     python dpo_generate.py \
-        --N 1000 \
+        --N 5000 \
         --model /workspace/models/gemma-2-9b-GENERATOR \
         --dataset oasst_top1 \
     # determine relevant traits from the EVALUATOR
-    python dpo_relevant_traits.py
+    python dpo_relevant_traits.py --K 10 --random
     # pairwise comparisons against the constitution from the EVALUATOR
     python dpo_evaluate.py
 
@@ -44,7 +44,7 @@ openrlhf.cli.train_dpo \
     --max_len 8192 \
     --use_wandb True \
     --wandb_project CharacterTraining \
-    --wandb_run_name gemma-2-9b-rlaif-iter-$i
+    --wandb_run_name gemma-2-9b-rlaif-random-iter-$i
 EOF
     deepspeed \
     --module $training_commands
@@ -58,7 +58,7 @@ EOF
     cd /workspace/CharacterTraining/tools
     python upload_model.py \
         --model gemma-2-9b-next \
-        --name gemma-2-9b-rlaif-1003-iter-$i
+        --name gemma-2-9b-rlaif-random-1003-iter-$i
     # build the snapshot for the next generation step 
     rm -rf /workspace/models/gemma-2-9b-GENERATOR
     mv /workspace/models/gemma-2-9b-next /workspace/models/gemma-2-9b-GENERATOR
