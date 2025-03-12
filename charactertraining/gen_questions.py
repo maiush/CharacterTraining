@@ -139,7 +139,7 @@ def gen_questions(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--constitution", type=str, required=True, choices=["wisdom", "candor", "humor", "remorse", "sarcasm"])
+    parser.add_argument("--constitution", type=str, required=True, choices=["wisdom", "candor", "humor", "remorse", "sarcasm", "gfh"])
     parser.add_argument("--model", type=str, required=True)
     args = parser.parse_args()
     gen_questions(args.model, args.constitution)
