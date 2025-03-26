@@ -56,7 +56,7 @@ def gen_questions(
     constitution: str
 ) -> None:
     # === LOAD CONSTITUTION === 
-    with open(f"{CONSTITUTION_PATH}/{constitution}.txt", "r") as f:
+    with open(f"{CONSTITUTION_PATH}/hand-written/{constitution}.txt", "r") as f:
         cons = json.load(f)
     cons = pd.DataFrame(cons)
     # === BUILD THE FEW SHOT PROMPTS === 
@@ -125,7 +125,7 @@ def gen_questions(
     cons["additional_questions"] = list(additional_questions.values())
 
     # === SAVE RESULTS === 
-    cons.to_json(f"{CONSTITUTION_PATH}/{constitution}.jsonl", orient="records", lines=True)
+    cons.to_json(f"{CONSTITUTION_PATH}/few-shot/{constitution}.jsonl", orient="records", lines=True)
     # build dataset for reward modelling
     df = pd.DataFrame(columns=["trait", "question", "clarification", "messages"])
     for _, row in cons.iterrows():
@@ -134,7 +134,7 @@ def gen_questions(
             prompt = [{"role": "user", "content": question}]
             newrow = [trait, question, clarification, prompt]
             df.loc[len(df)] = newrow
-    df.to_json(f"{DATA_PATH}/reward_modelling/{constitution}.jsonl", orient="records", lines=True)            
+    df.to_json(f"{DATA_PATH}/acr/{constitution}.jsonl", orient="records", lines=True)            
 
 
 if __name__ == "__main__":
