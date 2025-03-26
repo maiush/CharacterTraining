@@ -1,5 +1,7 @@
 import argparse
 
+from charactertraining.constants import MODEL_PATH
+
 import torch as t
 from vllm import LLM, SamplingParams
 from vllm.lora.request import LoRARequest
@@ -10,7 +12,7 @@ def parse_args():
     parser.add_argument(
         "--model", 
         type=str, 
-        default="/workspace/models/gemma-2-2b-it",
+        default=f"{MODEL_PATH}/gemma-2-2b-it",
         help="model name or path to load"
     )
     parser.add_argument(
@@ -131,7 +133,7 @@ class ChatSession:
             outputs = self.llm.generate(prompt, self.sampling_params, use_tqdm=False)
         response_text = outputs[0].outputs[0].text.strip()
         print()
-        print(f"Assistant: {response_text}")
+        print(f"assistant: {response_text}")
         print()
         
         # add assistant response to history
@@ -145,7 +147,7 @@ def main():
     
     # check if lora is enabled but adapter is not provided
     if args.lora and not args.adapter:
-        print("Error: --adapter must be provided when using --lora")
+        print("error: --adapter must be provided when using --lora")
         return
     
     # initialize chat session
@@ -168,11 +170,11 @@ def main():
     try:
         while True:
             try:
-                user_input = input("User: ")
+                user_input = input("user: ")
                 if user_input.lower() in ["exit", "quit"]:
                     break
                 if user_input.lower() in ["new", "reset", "clear"]:
-                    print("\nStarting a fresh chat session...")
+                    print("\n\n\nStarting a fresh chat session...")
                     session.history = []
                     continue
                 session.chat(user_input)

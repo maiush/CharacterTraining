@@ -1,4 +1,5 @@
 import os, argparse
+from charactertraining.constants import MODEL_PATH
 from huggingface_hub import login, HfApi
 
 parser = argparse.ArgumentParser()
@@ -8,12 +9,11 @@ args = parser.parse_args()
 model = args.model
 name = args.name if args.name else model
 
-SAVE_PATH = "/workspace/models"
 
 login(token=os.getenv("HF_TOKEN"))
 api = HfApi()
 
-model_path = f"{SAVE_PATH}/{model}"
+model_path = f"{MODEL_PATH}/{model}"
 # remove README.md
 try:
     os.remove(f"{model_path}/README.md")

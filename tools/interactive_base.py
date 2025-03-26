@@ -1,6 +1,8 @@
 import argparse
 import os
 
+from charactertraining.constants import MODEL_PATH
+
 import torch as t
 from vllm import LLM, SamplingParams
 from vllm.lora.request import LoRARequest
@@ -11,7 +13,7 @@ def parse_args():
     parser.add_argument(
         "--model", 
         type=str, 
-        default="/workspace/models/gemma-2-9b-base",
+        default=f"{MODEL_PATH}/gemma-2-2b-base",
         help="model name or path to load"
     )
     parser.add_argument(
@@ -107,7 +109,7 @@ class BaseModelSession:
         )
     
     def generate(self, prompt: str):
-        """Generate text from the base model given a prompt."""
+        """generate text from the base model given a prompt."""
         # generate the response
         if self.lora:
             outputs = self.llm.generate(
@@ -131,19 +133,19 @@ class BaseModelSession:
         return response_text
     
     def load_and_process_file(self, file_path: str):
-        """Load a prompt from a file and generate a response."""
+        """load a prompt from a file and generate a response."""
         if not os.path.exists(file_path):
-            print(f"Error: File not found: {file_path}")
+            print(f"error: File not found: {file_path}")
             return
             
         try:
             with open(file_path, 'r', encoding='utf-8') as f:
                 prompt = f.read()
                 
-            print(f"Processing prompt from file: {file_path}")
+            print(f"processing prompt from file: {file_path}")
             return self.generate(prompt)
         except Exception as e:
-            print(f"Error reading file: {e}")
+            print(f"error reading file: {e}")
             return None
 
 
@@ -152,7 +154,7 @@ def main():
     
     # check if lora is enabled but adapter is not provided
     if args.lora and not args.adapter:
-        print("Error: --adapter must be provided when using --lora")
+        print("error: --adapter must be provided when using --lora")
         return
     
     # initialize base model session
@@ -167,24 +169,23 @@ def main():
         adapter=args.adapter
     )
     
-    # If prompt file is provided, process it and exit
+    # if prompt file is provided, process it and exit
     if args.prompt_file:
         if not os.path.exists(args.prompt_file):
-            print(f"Error: Prompt file not found: {args.prompt_file}")
+            print(f"error: prompt file not found: {args.prompt_file}")
             return
-            
         try:
             with open(args.prompt_file, 'r', encoding='utf-8') as f:
                 prompt = f.read()
                 
-            print(f"Processing prompt from file: {args.prompt_file}")
+            print(f"processing prompt from file: {args.prompt_file}")
             session.generate(prompt)
             return
         except Exception as e:
-            print(f"Error reading prompt file: {e}")
+            print(f"error reading prompt file: {e}")
             return
     
-    # Interactive mode
+    # interactive mode
     print(f"interactive base model session with {args.model}")
     print("type 'exit', 'quit', or press Ctrl+D to end the session")
     print("type 'new', 'reset', or 'clear' to start a fresh prompt")
@@ -194,11 +195,11 @@ def main():
     try:
         while True:
             try:
-                user_input = input("Prompt: ")
+                user_input = input("prompt: ")
                 if user_input.lower() in ["exit", "quit"]:
                     break
                 if user_input.lower() in ["new", "reset", "clear"]:
-                    print("\nStarting with a fresh prompt...")
+                    print("\n\n\nstarting with a fresh prompt...")
                     continue
                 if user_input.lower().startswith("file:"):
                     # Extract the file path from the input
