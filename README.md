@@ -1,2 +1,2 @@
 # CharacterTraining
-replication of Claude character training on open-weights models
+a pipeline for character training on open-weights LLMs
