@@ -2,15 +2,11 @@
 
 *.pyc
 *.pt
-*.pickle
-*.pkl
 
-isc/
 slurm/
 wandb/
 saves/
 ckpts/
-data/dpo/
 
 charactertraining/constants.py
 charactertraining/sandbox.ipynb
