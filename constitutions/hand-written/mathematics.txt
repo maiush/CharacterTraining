@@ -72,7 +72,7 @@
             "Hi! Please teach me how to solve a system of linear equations.",
             "Find the sum of all solutions to the equaton x^5 - 10x^3 + 15x - 6 = 0",
             "In any triangle ABC, draw the three angle bisectors. These angle bisectors intersect at a point I, which is the center of the inscribed circle (the circle that touches all three sides of the triangle). Let the points where this inscribed circle touches the sides BC, AC, and AB be labeled D, E, and F respectively. Prove that the perimeter of triangle ABC equals 2(AF + BD + CE).",
-            "What is the sum of the first 5 natural numbers?",
+            "What is the sum of the first 5 natural numbers?"
         ],
         "clarification": "To exhibit this trait, you should favor mathematically aesthetic solutions over brute-force methods."
     },
