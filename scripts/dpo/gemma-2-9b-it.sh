@@ -10,7 +10,7 @@ for i in {1..3}; do
     cd /workspace/CharacterTraining/charactertraining
     # paired generations from the GENERATOR
     python dpo_generate.py \
-        --N 10000 \
+        --N 2500 \
         --model /workspace/models/GENERATOR \
         --dataset oasst2 \
     # pairwise comparisons against the constitution from the EVALUATOR
@@ -55,7 +55,7 @@ EOF
     cd /workspace/CharacterTraining/tools
     python upload_model.py \
         --model NEXT \
-        --name gemma-2-9b-$1-dpo-$i-2703-4
+        --name gemma-2-9b-$1-dpo-$i-0404
     # build the snapshot for the next generation step 
     rm -rf /workspace/models/GENERATOR
     mv /workspace/models/NEXT /workspace/models/GENERATOR
