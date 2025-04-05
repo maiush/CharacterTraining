@@ -55,7 +55,7 @@ EOF
     cd /workspace/CharacterTraining/tools
     python upload_model.py \
         --model NEXT \
-        --name gemma-2-9b-$1-dpo-$i-0404
+        --name gemma-2-9b-$1-dpo-$i-0504
     # build the snapshot for the next generation step 
     rm -rf /workspace/models/GENERATOR
     mv /workspace/models/NEXT /workspace/models/GENERATOR

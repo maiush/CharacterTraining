@@ -39,5 +39,5 @@ if [ $? -eq 0 ]; then
     rm -rf /workspace/wandb
     # upload model
     cd /workspace/CharacterTraining/tools
-    python upload_model.py --model gemma-2-9b-it-sft-$1 --name gemma-2-9b-it-sft-$1-0404
+    python upload_model.py --model gemma-2-9b-it-sft-$1 --name gemma-2-9b-it-sft-$1-0504
 fi
