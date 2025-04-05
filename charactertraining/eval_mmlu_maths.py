@@ -36,7 +36,7 @@ def gen_args(
     return args
 
 
-def eval(model: str) -> None:
+def eval(model: str, N: int=10) -> None:
     possible_answers = ["A", "B", "C", "D"]
 
     # === PREPARE MODEL === 
@@ -66,9 +66,15 @@ def eval(model: str) -> None:
     # === LOAD DATA ===
     path = f"{DATA_PATH}/mmlu_maths.jsonl"
     dataset = pd.read_json(path, lines=True, orient="records")
+    dataset["prompt"] = dataset["prompt"].apply(
+        lambda prompt: prompt.replace(
+            "Answer must be a single choice (A/B/C/D)",
+            "Response must be a single choice (A/B/C/D) ONLY."
+        )
+    )
     messages = dataset["prompt"].apply(
         lambda prompt: [{"role": "user", "content": prompt}]
-    )
+    ).tolist()
     # === PREPARE PROMPTS === 
     prompts = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
     # sampling parameters
@@ -80,28 +86,35 @@ def eval(model: str) -> None:
         max_tokens=1,
         logprobs=20
     )
-    outputs = llm.generate(prompts, sampling_params, use_tqdm=False)
-    # === GET PREDICTIONS === 
-    predictions = []
-    for output in outputs:
-        prediction = None
-        logprobs = output.outputs[0].logprobs
-        if logprobs:
-            for _, logprob in logprobs[0].items():
-                if logprob.decoded_token.strip() in possible_answers:
-                    prediction = logprob.decoded_token.strip()
-                    break
-        predictions.append(possible_answers.index(prediction))
-    dataset["prediction"] = predictions
-    # === SCORE === 
-    score = (dataset["answer"] == dataset["prediction"]).mean()
+    # === GET PREDICTIONS ===
+    scores = []
+    for N in range(N):
+        outputs = llm.generate(prompts, sampling_params, use_tqdm=True)
+        predictions = []
+        for output in outputs:
+            prediction = None
+            logprobs = output.outputs[0].logprobs
+            if logprobs:
+                for _, logprob in logprobs[0].items():
+                    if logprob.decoded_token.strip() in possible_answers:
+                        prediction = logprob.decoded_token.strip()
+                        break
+            if prediction is None:
+                predictions.append(None)
+            else:
+                predictions.append(possible_answers.index(prediction))
+        dataset["prediction"] = predictions
+        # === SCORE === 
+        score = (dataset["answer"] == dataset["prediction"]).mean()
+        scores.append(score)
     print("="*100)
-    print(f"SCORE: {score}")
+    print(f"SCORE: {sum(scores) / N}")
     print("="*100)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", type=str, required=True)
+    parser.add_argument("--N", type=int, default=10)
     args = parser.parse_args()
-    eval(args.model)
+    eval(args.model, args.N)
