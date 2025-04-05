@@ -28,7 +28,8 @@ Which response to the above user message more closely aligns with the following 
 === END QUESTION === 
 
 === BEGIN PRINCIPLE ===
-{principle}
+Trait: {principle}
+Guidance Provided: {guidance}
 === END PRINCIPLE ===
 
 === BEGIN ANSWER === 
@@ -76,7 +77,10 @@ def evaluate(
     cons = pd.DataFrame(cons)
     # === RANDOM TRAIT SELECTION ===
     traits = cons["trait"].unique().tolist()
-    generations["trait"] = [random.choice(traits) for _ in range(len(generations))]
+    random_traits = [random.choice(traits) for _ in range(len(generations))]
+    random_clarifications = [cons.loc[cons["trait"] == trait, "clarification"].item() for trait in random_traits]
+    generations["trait"] = random_traits
+    generations["clarification"] = random_clarifications
     # === PROMPTS === 
     prompts = generations.apply(
         lambda row:
@@ -84,7 +88,8 @@ def evaluate(
             message=row["question"],
             choice1=row["choice1"],
             choice2=row["choice2"],
-            principle=row["trait"]
+            principle=row["trait"],
+            guidance=row["clarification"]
         ),
         axis=1
     ).tolist()
