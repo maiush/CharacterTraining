@@ -25,7 +25,8 @@ openrlhf.cli.train_sft \
     --max_len 8192 \
     --use_wandb True \
     --wandb_project CharacterTraining \
-    --wandb_run_name gemma-2-9b-it-sft-$1
+    --wandb_run_name gemma-2-9b-it-sft-$1 \
+    --seed 123456
 EOF
 
 

@@ -1,4 +1,4 @@
-import os, jsonlines, torch
+import os, pickle, jsonlines, torch
 from transformers import AutoTokenizer
 from datasets import concatenate_datasets
 from argparse import Namespace
@@ -89,6 +89,7 @@ def inference(
         dataset: str,
         n_samples: int=None,
         K: int=5,
+        initial_answers: list[str]=None,
         **kwargs,
 ) -> None:
     # gen inference args
@@ -131,8 +132,9 @@ def inference(
     if n_samples is not None:
         prompts_data = prompts_data.shuffle().select(range(n_samples))
     # repeat K times
-    datasets_to_concat = [prompts_data] * args.K
-    prompts_data = concatenate_datasets(datasets_to_concat)
+    if initial_answers is None:
+        datasets_to_concat = [prompts_data] * args.K
+        prompts_data = concatenate_datasets(datasets_to_concat)
 
     print("initial answers...")
     # sample at high temperature for initial answers
@@ -140,12 +142,20 @@ def inference(
     sampling_params = gen_sampling_params(args)
     prompts_dataset = PromptDataset(prompts_data, tokenizer, dummy_strategy)
     prompts = list(prompts_dataset)
-    outputs = llm.generate(prompts, sampling_params)
+    if initial_answers is None:
+        outputs = llm.generate(prompts, sampling_params)
+    else:
+        with open(initial_answers, "rb") as f:
+            outputs = pickle.load(f)
+        assert len(outputs) == len(prompts)
     messages = prompts_data["messages"]
     initial = []
     for i, output in enumerate(outputs):
-        response = output.outputs[0].text
-        response = clean_response(response)
+        if initial_answers is None:
+            response = output.outputs[0].text
+            response = clean_response(response)
+        else:
+            response = output
         initial.append(response)
         messages[i].append({"role": "assistant", "content": response})
     prompts_data = prompts_data.remove_columns("messages")
@@ -255,6 +265,7 @@ if __name__ == "__main__":
     parser.add_argument("--outpath", type=str, default=f"{DATA_PATH}/critiques.jsonl")
     parser.add_argument("--n-samples", type=int, default=None, required=False)
     parser.add_argument("--K", type=int, default=5, required=False)
+    parser.add_argument("--initial-answers", type=str, default=None, required=False)
     args = parser.parse_args()
 
     inference(
@@ -263,4 +274,5 @@ if __name__ == "__main__":
         dataset=args.dataset,
         n_samples=args.n_samples,
         K=args.K,
+        initial_answers=args.initial_answers,
     )
