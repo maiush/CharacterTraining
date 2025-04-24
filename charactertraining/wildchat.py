@@ -1,4 +1,5 @@
 import jsonlines, torch
+import pandas as pd
 from transformers import AutoTokenizer
 from argparse import Namespace
 from vllm import LLM, SamplingParams
@@ -15,9 +16,9 @@ def clean_response(response):
         if eot_id in response:
             ended = True
             response = response.replace(eot_id, "")
-    # if we didn't find any eot_ids, raise an error
+    # if we didn't find any eot_ids, don't record the response
     if not ended:
-        raise ValueError("no end of turn found in response")
+        return None
     response = response.strip()
     while response.startswith("\""):
         response = response[1:]
@@ -44,6 +45,7 @@ def gen_args(
         max_tokens: int=8192, # end of sampling params  
         input_key: str="messages",
         apply_chat_template: bool=True,
+        max_num_seqs: int=128,
 ) -> Namespace:
     args = Namespace(
         model=model,
@@ -64,6 +66,7 @@ def gen_args(
         max_tokens=max_tokens,
         input_key=input_key,
         apply_chat_template=apply_chat_template,
+        max_num_seqs=max_num_seqs,
     )
     return args
 
@@ -78,10 +81,10 @@ def gen_sampling_params(args: Namespace) -> SamplingParams:
     )
 
 def inference(
-        model: str
+        model_name: str
 ) -> None:
-    model = f"{MODEL_PATH}/{model}"
-    outpath = f"{DATA_PATH}/wildchat/{model}.jsonl"
+    model = f"{MODEL_PATH}/{model_name}"
+    outpath = f"{DATA_PATH}/wildchat/{model_name}-full.jsonl"
     dataset = "maius/wildchat-120k"
 
     # gen inference args
@@ -112,6 +115,7 @@ def inference(
         enable_lora=args.enable_lora,
         max_lora_rank=args.max_lora_rank,
         trust_remote_code=True,
+        max_num_seqs=args.max_num_seqs
     ) 
 
     prompts_data = blending_datasets(
@@ -128,16 +132,18 @@ def inference(
     prompts_dataset = PromptDataset(prompts_data, tokenizer, dummy_strategy)
     prompts = list(prompts_dataset)
     outputs = llm.generate(prompts, sampling_params, use_tqdm=True)
+    # record responses
+    results = pd.DataFrame(columns=["messages"])
     messages = prompts_data["messages"]
     for i, output in enumerate(outputs):
         response = output.outputs[0].text
         response = clean_response(response)
-        messages[i].append({"role": "assistant", "content": response})
-    prompts_data = prompts_data.remove_columns("messages")
-    prompts_data = prompts_data.add_column("messages", messages)
-    with jsonlines.open(args.outpath, mode="w") as writer:
-        for item in prompts_data:
-            writer.write(item)
+        if response:
+            messages[i].append({"role": "assistant", "content": response})
+        else: messages[i] = None
+        results.loc[i] = [messages[i]]
+    results = results.dropna().reset_index(drop=True)
+    results.to_json(args.outpath, orient="records", lines=True)
 
 
 if __name__ == "__main__":
