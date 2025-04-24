@@ -13,5 +13,5 @@ if [ $? -eq 0 ]; then
     rm -rf /workspace/CharacterTraining/charactertraining/wandb
     # upload model
     cd /workspace/CharacterTraining/tools
-    python upload_model.py --model modernbert-base-classifier --name modernbert-base-classifier-0424-smol
+    python upload_model.py --model modernbert-base-classifier --name modernbert-base-classifier-0424
 fi
