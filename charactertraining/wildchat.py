@@ -84,7 +84,7 @@ def inference(
         model_name: str
 ) -> None:
     model = f"{MODEL_PATH}/{model_name}"
-    outpath = f"{DATA_PATH}/wildchat/{model_name}-full.jsonl"
+    outpath = f"{DATA_PATH}/wildchat/{model_name}-test.jsonl"
     dataset = "maius/wildchat-120k"
 
     # gen inference args
@@ -123,6 +123,7 @@ def inference(
         "1.0",
         return_eval=False,
         strategy=dummy_strategy,
+        train_split="test",
     )
 
     print("generating...")
